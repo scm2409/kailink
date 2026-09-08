@@ -39,6 +39,9 @@ import org.matrix.rustcomponents.sdk.SyncService
 import org.matrix.rustcomponents.sdk.SyncSettingsV2
 import org.matrix.rustcomponents.sdk.TaskHandle
 import org.matrix.rustcomponents.sdk.TextMessageContent
+import uniffi.matrix_sdk_crypto.CollectStrategy
+import uniffi.matrix_sdk_crypto.DecryptionSettings
+import uniffi.matrix_sdk_crypto.TrustRequirement
 import org.matrix.rustcomponents.sdk.Timeline
 import org.matrix.rustcomponents.sdk.TimelineDiff
 import org.matrix.rustcomponents.sdk.TimelineItem
@@ -62,6 +65,7 @@ class MatrixSdkChannelClient(
     private val scope: CoroutineScope,
     private val appId: String = PushConfiguration.DEFAULT_APP_ID,
     private val gatewayUrl: String = PushConfiguration.DEFAULT_GATEWAY_URL,
+    private val e2eeTestConfig: E2eeTestConfig? = null,
     private val onLog: (String) -> Unit = {},
 ) : ChannelClient {
 
@@ -137,6 +141,10 @@ class MatrixSdkChannelClient(
                 cacheDir.absolutePath,
             ),
         )
+        if (e2eeTestConfig?.allowUntrustedDevices == true) {
+            builder.roomKeyRecipientStrategy(CollectStrategy.ALL_DEVICES)
+            builder.decryptionSettings(DecryptionSettings(TrustRequirement.UNTRUSTED))
+        }
         return try {
             builder.build()
         } catch (t: Throwable) {
