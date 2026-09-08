@@ -7,7 +7,7 @@
   `https://ntfy.sh/_matrix/push/v1/notify`.
 - Sitzungen werden produktiv mit AES-256-GCM und einem nicht exportierbaren
   Android-Keystore-Schlüssel geschützt; JVM-Tests verwenden den Dateitestdouble.
-- Die Phase-1-Version lautet `0.2.0-phase1`.
+- Die Phase-1-Version lautet `0.2.1-phase1`.
 
 - Für Android-Instrumentierungstests werden AndroidX Test Runner `1.6.2`,
   AndroidX Test JUnit `1.2.1` und Test Core `1.6.1` verwendet. Der erste
@@ -20,3 +20,8 @@
   Matrix-/E2EE-/UnifiedPush-Kette verlangt wird. Ohne echten Test-
   Konfigurationskanal, kontrollierten E2EE-Schlüsselaustausch und
   Distributor-Nachweis wäre ein grüner Exit-Code irreführend.
+
+- Die gegen `sdk-android:26.09.08` verifizierten E2EE-Typen liegen im
+  Namespace `uniffi.matrix_sdk_crypto`; die optionale Testkonfiguration setzt
+  `CollectStrategy.ALL_DEVICES` und `DecryptionSettings(TrustRequirement.UNTRUSTED)`.
+  Cross-Signing und Key-Backup werden nicht getestet oder behauptet.

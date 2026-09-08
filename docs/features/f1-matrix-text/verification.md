@@ -38,6 +38,22 @@ Android-Instrumentierung prüft bislang nur Paketmetadaten und das Login-Prefill
 der vollständige Matrix-/E2EE-/Pusher-Lauf gegen den lokalen Homeserver ist
 weiterhin offen und nicht als bestanden behauptet.
 
+## Aktueller instrumentierter E2E-Stand
+
+Der Emulatorlauf `kailink-atd35` enthält einen Android-HTTP-Konnektivitätstest
+mit `HttpURLConnection`. Er prüft zuerst `http://192.168.42.20:8090` und danach
+`http://10.0.2.2:8090`; die Auswahl wird im Instrumentierungs-Log ausgegeben.
+Der Lauf wurde mit `OK (2 tests)` beobachtet. Der zweite Test ist ein
+Gateway-Smoke, kein Matrix-Login.
+
+Die SDK-Nahtstellen für `createRoom` und `joinRoom` sowie die optionale
+Testkonfiguration für `CollectStrategy.ALL_DEVICES` und
+`DecryptionSettings(TrustRequirement.UNTRUSTED)` kompilieren gegen
+`sdk-android:26.09.08`. Ein echter Zwei-Konten-Matrix-/E2EE-Lauf ist noch nicht
+als bestanden markiert: die Instrumentierung erhält derzeit keine live
+Wegwerfkonto-Konfiguration und führt daher keinen Login-, Sende-, Empfangs-
+oder Klartextvergleich aus.
+
 ## Emulator-Gate-Skript
 
 `./scripts/emulator-e2e.sh` führt den lokalen Matrix-/ntfy-HTTP-Smoke, die
