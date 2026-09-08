@@ -13,7 +13,9 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.box44.kailink.data.matrix.MatrixSdkChannelClient
+import org.box44.kailink.data.push.PushController
 import org.box44.kailink.data.session.FileSessionStore
+import org.box44.kailink.domain.ChannelClient
 import org.box44.kailink.domain.ChannelEvent
 import org.box44.kailink.domain.model.DeliveryState
 import org.box44.kailink.domain.model.Message
@@ -47,8 +49,9 @@ class MatrixE2eTest {
         val bobCreds = harness.bobCredentials()
         val homeserver = harness.requireHomeserver()
         val gateway = harness.requireGateway()
+        val pusherGateway = harness.pusherGatewayBase()
         harness.report(
-            "E2E A: alice=${aliceCreds.username} homeserver=$homeserver gateway=$gateway",
+            "E2E A: alice=${aliceCreds.username} homeserver=$homeserver gateway=$gateway pusherGateway=$pusherGateway",
         )
 
         val aliceDirs = harness.newStoreDirs("alice-a")
@@ -64,7 +67,7 @@ class MatrixE2eTest {
                 storeDir = aliceDirs.state,
                 cacheDir = aliceDirs.cache,
                 scope = scope,
-                gatewayUrl = "$gateway/_matrix/push/v1/notify",
+                gatewayUrl = "$pusherGateway/_matrix/push/v1/notify",
                 onLog = harness::report,
             )
             aliceClient = alice
@@ -136,7 +139,7 @@ class MatrixE2eTest {
                 storeDir = aliceDirs.state,
                 cacheDir = aliceDirs.cache,
                 scope = scope,
-                gatewayUrl = "$gateway/_matrix/push/v1/notify",
+                gatewayUrl = "$pusherGateway/_matrix/push/v1/notify",
                 onLog = harness::report,
             )
             aliceClient = alice2
@@ -150,11 +153,14 @@ class MatrixE2eTest {
             harness.report("Restore-Leg ok: Raum nach restore() in rooms() enthalten")
             collector.cancel()
 
-            // 9. Chunk B (verschluesselt): gleicher Ablauf mit encrypted=true,
+            // 9. Chunk C2: Pusher-Registrierung + C2b Zustellbeweis.
+            runPushLeg(harness, homeserver, gateway, pusherGateway, aliceCreds, scope, alice2, roomId)
+
+            // 10. Chunk B (verschluesselt): gleicher Ablauf mit encrypted=true,
             // Alice mit e2eeTestConfig (ALL_DEVICES + UNTRUSTED). Laeuft der
             // verschluesselte Pfad an einer Conduit-Grenze auf, bleibt Chunk A
             // das harte Ergebnis und B wird als Diagnose berichtet.
-            runEncryptedLeg(harness, homeserver, gateway, aliceCreds, bobCreds, scope)
+            runEncryptedLeg(harness, homeserver, gateway, pusherGateway, aliceCreds, bobCreds, scope)
         } finally {
             runCatching { aliceClient?.dispose() }
             bobClient?.let { runCatching { bobClient?.close() } }
@@ -164,10 +170,93 @@ class MatrixE2eTest {
         }
     }
 
+    /**
+     * Chunk C2: registriert einen synthetischen UnifiedPush-Endpoint als
+     * Matrix-Pusher (via [PushController.onNewEndpoint] → SUT-Pfad, kein
+     * Distributor nötig), assertert ihn über `GET /pushers` (app_id,
+     * pushkey, kind=http, data.url=Gateway) und beweist C2b: Nach einer
+     * Bob-Nachricht MUSS ntfy einen Publish erhalten (ntfy-Cache-API des
+     * Topics = Conduit→ntfy-Zustellung, sonst Fail).
+     */
+    private suspend fun runPushLeg(
+        harness: E2eHarness,
+        homeserver: String,
+        gateway: String,
+        pusherGateway: String,
+        aliceCreds: E2eCredentials,
+        scope: CoroutineScope,
+        alice: ChannelClient,
+        roomId: String,
+    ) {
+        val topic = "kailink-e2e-${UUID.randomUUID().toString().take(8)}"
+        // Push-Trennung: Der Endpoint (pushkey) ist die aus Emulator-Sicht
+        // lesbare ntfy-URL (Cache-Pruefung via `gateway`/adb reverse); das
+        // Gateway (data.url) zeigt aus Conduit-Sicht ins Container-Netz
+        // (`pusherGateway`, via alice2-Konstruktor gesetzt). ntfy parst das
+        // Topic aus dem pushkey-Pfad — Host-Anteil ist irrelevant.
+        val endpoint = "$gateway/$topic"
+        val controller = PushController(alice, scope, harness::report)
+        controller.onNewEndpoint(endpoint)
+        val deadline = System.currentTimeMillis() + PUSH_TIMEOUT_MILLIS
+        while (controller.lastRegisteredEndpoint == null && System.currentTimeMillis() < deadline) {
+            kotlinx.coroutines.delay(500)
+        }
+        checkNotNull(controller.lastRegisteredEndpoint) {
+            "C2: Pusher-Registrierung schlug fehl (lastRegisteredEndpoint==null)"
+        }
+        harness.report("C2: Endpoint registriert: $endpoint")
+
+        // GET /pushers-Assert gegen Conduit (Alice-Token aus laufender Sitzung).
+        val session = checkNotNull(alice.activeSession) { "C2: keine aktive Alice-Sitzung" }
+        val pushersJson = harness.httpGet(
+            "${homeserver}/_matrix/client/v3/pushers",
+            session.accessToken,
+        )
+        harness.report("C2: GET /pushers → ${pushersJson.take(400)}")
+        assertTrue("C2: pushkey $endpoint nicht in /pushers", pushersJson.contains(endpoint))
+        assertTrue("C2: app_id org.box44.kailink nicht in /pushers", pushersJson.contains("org.box44.kailink"))
+        assertTrue("C2: gateway $pusherGateway nicht in /pushers", pushersJson.contains(pusherGateway))
+
+        // C2b: Bob-Nachricht → ntfy MUSS einen Publish am Topic zeigen.
+        val bobDirs = harness.newStoreDirs("bob-c2b")
+        var bobClient: RawBobClient? = null
+        try {
+            val bobCreds = harness.bobCredentials()
+            val bob = RawBobClient.login(homeserver, bobCreds.username, bobCreds.password, bobDirs.state)
+            bobClient = bob
+            bob.e2eeInit()
+            val c2bBody = "e2e-c2b-${UUID.randomUUID()}"
+            bob.sendText(roomId, c2bBody)
+            repeat(3) {
+                runCatching { bob.syncOnce() }
+                runCatching { alice.syncOnce() }
+            }
+            harness.report("C2b: Bob hat gesendet: $c2bBody")
+        } finally {
+            runCatching { bobClient?.close() }
+            harness.deleteStoreDirs(bobDirs)
+        }
+        val before = System.currentTimeMillis()
+        var delivered = false
+        var lastNtfy = ""
+        while (System.currentTimeMillis() - before < PUSH_TIMEOUT_MILLIS) {
+            lastNtfy = runCatching { harness.httpGetText("$gateway/$topic/json?poll=1") }.getOrDefault("")
+            if (lastNtfy.contains("event") || lastNtfy.contains("message")) {
+                delivered = true
+                break
+            }
+            kotlinx.coroutines.delay(2_000)
+        }
+        harness.report("C2b: ntfy-Antwort: ${lastNtfy.take(400)}")
+        assertTrue("C2b: kein Publish bei ntfy für Topic $topic (Conduit→ntfy-Zustellung fehlt)", delivered)
+        harness.report("C2b ok: Conduit→ntfy-Zustellung bewiesen (Topic $topic)")
+    }
+
     private suspend fun runEncryptedLeg(
         harness: E2eHarness,
         homeserver: String,
         gateway: String,
+        pusherGateway: String,
         aliceCreds: E2eCredentials,
         bobCreds: E2eCredentials,
         scope: CoroutineScope,
@@ -183,7 +272,7 @@ class MatrixE2eTest {
                 storeDir = aliceDirs.state,
                 cacheDir = aliceDirs.cache,
                 scope = scope,
-                gatewayUrl = "$gateway/_matrix/push/v1/notify",
+                gatewayUrl = "$pusherGateway/_matrix/push/v1/notify",
                 e2eeTestConfig = org.box44.kailink.data.matrix.E2eeTestConfig(),
                 onLog = harness::report,
             )
@@ -270,5 +359,6 @@ class MatrixE2eTest {
     companion object {
         private const val POLL_TIMEOUT_MILLIS = 60_000L
         private const val POLL_STEP_MILLIS = 1_000L
+        private const val PUSH_TIMEOUT_MILLIS = 30_000L
     }
 }
