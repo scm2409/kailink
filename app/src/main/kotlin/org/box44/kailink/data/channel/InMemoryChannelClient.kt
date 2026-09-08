@@ -97,6 +97,27 @@ class InMemoryChannelClient(
         return synchronized(rooms) { rooms.values.map { it.toRoom() } }
     }
 
+    override suspend fun createRoom(name: String, inviteUserIds: List<String>, encrypted: Boolean): String {
+        requireSession()
+        val displayName = name.trim()
+        if (displayName.isEmpty()) throw ChannelException("Leerer Raumname")
+        val roomId = "!phase1-${UUID.randomUUID()}:phase1.local"
+        synchronized(rooms) {
+            rooms[roomId] = ChannelRoom(
+                id = roomId,
+                displayName = displayName,
+                isEncrypted = encrypted,
+            )
+        }
+        emitRooms()
+        return roomId
+    }
+
+    override suspend fun joinRoom(roomId: String) {
+        requireSession()
+        room(roomId)
+    }
+
     override suspend fun openTimeline(roomId: String) {
         requireSession()
         room(roomId)

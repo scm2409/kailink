@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import org.matrix.rustcomponents.sdk.Client
 import org.matrix.rustcomponents.sdk.ClientBuilder
+import org.matrix.rustcomponents.sdk.CreateRoomParameters
 import org.matrix.rustcomponents.sdk.EventOrTransactionId
 import org.matrix.rustcomponents.sdk.HttpPusherData
 import org.matrix.rustcomponents.sdk.MessageType
@@ -28,6 +29,8 @@ import org.matrix.rustcomponents.sdk.MsgLikeKind
 import org.matrix.rustcomponents.sdk.PushFormat
 import org.matrix.rustcomponents.sdk.PusherIdentifiers
 import org.matrix.rustcomponents.sdk.PusherKind
+import org.matrix.rustcomponents.sdk.RoomPreset
+import org.matrix.rustcomponents.sdk.RoomVisibility
 import org.matrix.rustcomponents.sdk.Room as SdkRoom
 import org.matrix.rustcomponents.sdk.Session as SdkSession
 import org.matrix.rustcomponents.sdk.SlidingSyncVersion
@@ -184,6 +187,38 @@ class MatrixSdkChannelClient(
             )
         }.also {
             onLog("Räume geladen: ${it.size}")
+        }
+    }
+
+    override suspend fun createRoom(name: String, inviteUserIds: List<String>, encrypted: Boolean): String {
+        val c = client ?: throw ChannelException("Keine aktive Sitzung")
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) throw ChannelException("Leerer Raumname")
+        val parameters = CreateRoomParameters(
+            name = trimmed,
+            isEncrypted = encrypted,
+            visibility = RoomVisibility.Private,
+            preset = RoomPreset.PRIVATE_CHAT,
+            invite = inviteUserIds,
+        )
+        return try {
+            val roomId = c.createRoom(parameters)
+            onLog("Raum erstellt: $roomId")
+            emitRooms()
+            roomId
+        } catch (t: Throwable) {
+            throw ChannelException("Raumerstellung fehlgeschlagen: ${t.message ?: "unbekannter Fehler"}", t)
+        }
+    }
+
+    override suspend fun joinRoom(roomId: String) {
+        val c = client ?: throw ChannelException("Keine aktive Sitzung")
+        try {
+            c.joinRoomById(roomId)
+            onLog("Raum beigetreten: $roomId")
+            emitRooms()
+        } catch (t: Throwable) {
+            throw ChannelException("Raumbeitritt fehlgeschlagen: ${t.message ?: "unbekannter Fehler"}", t)
         }
     }
 

@@ -48,6 +48,12 @@ interface ChannelClient {
     /** Aktuelle Raumliste. */
     suspend fun rooms(): List<Room>
 
+    /** Erstellt einen Raum (optional Einladungen, optional E2EE) und gibt die Raum-ID zurück. */
+    suspend fun createRoom(name: String, inviteUserIds: List<String>, encrypted: Boolean): String
+
+    /** Tritt einem Raum über seine Raum-ID bei. */
+    suspend fun joinRoom(roomId: String)
+
     /** Abonniert die Chronik eines Raums (idempotent). */
     suspend fun openTimeline(roomId: String)
 

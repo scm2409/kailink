@@ -98,6 +98,10 @@ class FakeChannelClient : ChannelClient {
 
     override suspend fun rooms(): List<Room> = roomsBehavior()
 
+    override suspend fun createRoom(name: String, inviteUserIds: List<String>, encrypted: Boolean): String = TEST_ROOM.id
+
+    override suspend fun joinRoom(roomId: String) = Unit
+
     override suspend fun openTimeline(roomId: String) {
         openTimelineCalls.add(roomId)
     }
