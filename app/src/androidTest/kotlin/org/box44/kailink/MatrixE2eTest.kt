@@ -149,10 +149,110 @@ class MatrixE2eTest {
             )
             harness.report("Restore-Leg ok: Raum nach restore() in rooms() enthalten")
             collector.cancel()
+
+            // 9. Chunk B (verschluesselt): gleicher Ablauf mit encrypted=true,
+            // Alice mit e2eeTestConfig (ALL_DEVICES + UNTRUSTED). Laeuft der
+            // verschluesselte Pfad an einer Conduit-Grenze auf, bleibt Chunk A
+            // das harte Ergebnis und B wird als Diagnose berichtet.
+            runEncryptedLeg(harness, homeserver, gateway, aliceCreds, bobCreds, scope)
         } finally {
             runCatching { aliceClient?.dispose() }
             bobClient?.let { runCatching { bobClient?.close() } }
             scope.cancel()
+            harness.deleteStoreDirs(aliceDirs)
+            harness.deleteStoreDirs(bobDirs)
+        }
+    }
+
+    private suspend fun runEncryptedLeg(
+        harness: E2eHarness,
+        homeserver: String,
+        gateway: String,
+        aliceCreds: E2eCredentials,
+        bobCreds: E2eCredentials,
+        scope: CoroutineScope,
+    ) {
+        val aliceDirs = harness.newStoreDirs("alice-b")
+        val bobDirs = harness.newStoreDirs("bob-b")
+        var bobClient: RawBobClient? = null
+        var aliceClient: MatrixSdkChannelClient? = null
+        try {
+            val aliceStoreFile = File(aliceDirs.state, "session.properties")
+            val alice = MatrixSdkChannelClient(
+                sessionStore = FileSessionStore(aliceStoreFile),
+                storeDir = aliceDirs.state,
+                cacheDir = aliceDirs.cache,
+                scope = scope,
+                gatewayUrl = "$gateway/_matrix/push/v1/notify",
+                e2eeTestConfig = org.box44.kailink.data.matrix.E2eeTestConfig(),
+                onLog = harness::report,
+            )
+            aliceClient = alice
+            val aliceSession = alice.login(homeserver, aliceCreds.username, aliceCreds.password)
+            harness.report("E2E B: Alice angemeldet: ${aliceSession.userId}")
+
+            val bob = RawBobClient.login(homeserver, bobCreds.username, bobCreds.password, bobDirs.state)
+            bobClient = bob
+            bob.e2eeInit()
+            harness.report("E2E B: Bob angemeldet: ${bob.userId()}")
+
+            val roomName = "kailink-e2e-b-${UUID.randomUUID().toString().take(8)}"
+            val roomId = alice.createRoom(roomName, listOf(bob.userId()), encrypted = true)
+            harness.report("E2E B: Raum erstellt (verschluesselt): $roomId")
+            try {
+                bob.joinRoom(roomId)
+                harness.report("E2E B: Bob beigetreten: $roomId")
+            } catch (t: Throwable) {
+                harness.report("E2E B: Bob-Join FEHLER: ${t.message}")
+                throw t
+            }
+            repeat(2) {
+                runCatching { bob.syncOnce() }.onFailure { harness.report("E2E B: bob.syncOnce: ${it.message}") }
+                runCatching { alice.syncOnce() }.onFailure { harness.report("E2E B: alice.syncOnce: ${it.message}") }
+            }
+
+            val received = CopyOnWriteArrayList<Message>()
+            val collector = scope.launchInCollector(alice) { received.addAll(it) }
+            alice.openTimeline(roomId)
+
+            val body = "e2e-b-${UUID.randomUUID()}"
+            try {
+                bob.sendText(roomId, body)
+                harness.report("E2E B: Bob-send ok")
+            } catch (t: Throwable) {
+                harness.report("E2E B: Bob-send FEHLER: ${t.message}")
+                throw t
+            }
+            repeat(3) {
+                runCatching { bob.syncOnce() }.onFailure { harness.report("E2E B: sendflush bob.syncOnce: ${it.message}") }
+                runCatching { alice.syncOnce() }.onFailure { harness.report("E2E B: sendflush alice.syncOnce: ${it.message}") }
+            }
+            harness.report("E2E B: Bob hat gesendet: $body")
+
+            val hit: Message? = withTimeoutOrNull(POLL_TIMEOUT_MILLIS) {
+                var found: Message? = null
+                while (found == null) {
+                    found = received.firstOrNull { it.body == body || it.body.contains("verschluesselt") }
+                    if (found == null) {
+                        runCatching { bob.syncOnce() }
+                        runCatching { alice.syncOnce() }
+                        kotlinx.coroutines.delay(POLL_STEP_MILLIS)
+                    }
+                }
+                found
+            }
+            checkNotNull(hit) { "E2E B: Alice hat Bobs Nachricht nicht empfangen (Timeout, body=$body)" }
+            assertEquals(
+                "E2E B: Nachricht nicht entschluesselt (state=${hit.state}, body=${hit.body})",
+                DeliveryState.SENT,
+                hit.state,
+            )
+            assertEquals("E2E B: Body-Mismatch", body, hit.body)
+            harness.report("E2E B ok: id=${hit.id} state=${hit.state}")
+            collector.cancel()
+        } finally {
+            runCatching { aliceClient?.dispose() }
+            bobClient?.let { runCatching { bobClient?.close() } }
             harness.deleteStoreDirs(aliceDirs)
             harness.deleteStoreDirs(bobDirs)
         }
