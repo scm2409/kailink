@@ -71,11 +71,12 @@ class MatrixE2eTest {
             val aliceSession = alice.login(homeserver, aliceCreds.username, aliceCreds.password)
             harness.report("Alice angemeldet: ${aliceSession.userId}")
 
-            // 2. Bob = roher SDK-Client.
+            // 2. Bob = roher SDK-Client. KEIN Live-Sync: der SyncService
+            // braucht Sliding Sync (Conduit: VersionIsMissing); Senden und
+            // Empfangen laufen hier ueber syncOnce (syncOnceV2).
             val bob = RawBobClient.login(homeserver, bobCreds.username, bobCreds.password, bobDirs.state)
             bobClient = bob
             bob.e2eeInit()
-            bob.startLiveSync()
             val bobUserId = bob.userId()
             harness.report("Bob angemeldet: $bobUserId")
 
@@ -88,18 +89,22 @@ class MatrixE2eTest {
             bob.joinRoom(roomId)
             harness.report("Bob beigetreten: $roomId")
 
-            // 5. Alice: Live-Sync starten + Chronik VOR Bobs Nachricht abonnieren.
-            alice.startLiveSync()
+            // 5. Alice: Chronik VOR Bobs Nachricht abonnieren (kein Live-Sync:
+            // SyncService braucht Sliding Sync, das Conduit nicht bietet;
+            // stattdessen treibt syncOnce im Poll-Loop unten den Sync).
             val received = CopyOnWriteArrayList<Message>()
             val collector = scope.launchInCollector(alice) { received.addAll(it) }
             alice.openTimeline(roomId)
 
-            // 6. Bob sendet.
+            // 6. Bob sendet (Queue via syncOnce flushen) + Alice syncen.
             val body = "e2e-a-${UUID.randomUUID()}"
             bob.sendText(roomId, body)
+            bob.syncOnce()
+            alice.syncOnce()
             harness.report("Bob hat gesendet: $body")
 
-            // 7. Alice pollt: Live-Sync liefert Timeline-Events, syncOnce als Zusatz.
+            // 7. Alice pollt: syncOnce treibt Sync + Send-Queue-Flush, die offene
+            // Timeline liefert die Events an den Collector.
             val hit: Message? = withTimeoutOrNull(POLL_TIMEOUT_MILLIS) {
                 var found: Message? = null
                 while (found == null) {
@@ -121,12 +126,10 @@ class MatrixE2eTest {
             checkNotNull(hit) { "Alice hat Bobs Nachricht nicht empfangen (Timeout ${POLL_TIMEOUT_MILLIS} ms, body=$body)" }
             harness.report("Alice hat empfangen: id=${hit.id} state=${hit.state}")
 
-            // 8. Restore-Leg: kein logout! Live-Sync stoppen → dispose → neu → restore → rooms().
+            // 8. Restore-Leg: kein logout! dispose → neu → restore → rooms().
             val savedSession = checkNotNull(FileSessionStore(aliceStoreFile).load()) {
                 "FileSessionStore enthält nach Login keine Sitzung"
             }
-            runCatching { bob.stopLiveSync() }
-            runCatching { alice.stopLiveSync() }
             alice.dispose()
             val alice2 = MatrixSdkChannelClient(
                 sessionStore = FileSessionStore(aliceStoreFile),

@@ -10,7 +10,6 @@ import org.matrix.rustcomponents.sdk.ClientBuilder
 import org.matrix.rustcomponents.sdk.MessageType
 import org.matrix.rustcomponents.sdk.Room
 import org.matrix.rustcomponents.sdk.SqliteStoreBuilder
-import org.matrix.rustcomponents.sdk.SyncService
 import org.matrix.rustcomponents.sdk.SyncSettingsV2
 import org.matrix.rustcomponents.sdk.TextMessageContent
 
@@ -27,35 +26,21 @@ import org.matrix.rustcomponents.sdk.TextMessageContent
  * `ClientBuilder.build`, `Client.login`, `Client.syncOnceV2`,
  * `Client.createRoom`, `Client.joinRoomById`, `Room.timeline`,
  * `Encryption.waitForE2eeInitializationTasks`, `Timeline.send`.
- * Synchron: `ClientBuilder.homeserverUrl/sqliteStore/inMemoryStore/...`
- * (Fluent-Setter ohne Continuation), `Client.rooms/getRoom/session/encryption`,
- * `Timeline.createMessageContent/addListener` (letzteres ist suspend und liefert
- * den Listener-Handle), `SyncSettingsV2()`-Konstruktor.
+ * Synchron: `ClientBuilder.homeserverUrl/sqliteStore/...` — immutable
+ * (Rust: self: Arc<Self> -> Arc<Self>), Rueckgaben VERKETTEN, sonst geht die
+ * Config verloren (belegt durch ClientBuildError ohne homeserver_url).
+ * Synchron weiter: `Client.rooms/getRoom/session/encryption`,
+ * `Timeline.createMessageContent`, `SyncSettingsV2()`-Konstruktor.
+ * Hinweis: `client.syncService().finish()` braucht Sliding Sync auf dem
+ * Server (Conduit: VersionIsMissing) — im E2E gegen Conduit daher syncOnce.
  */
 class RawBobClient private constructor(
     val client: Client,
     private val storeScope: CoroutineScope,
     val stateDir: File,
 ) {
-    private var syncService: SyncService? = null
-
     suspend fun e2eeInit() {
         client.encryption().waitForE2eeInitializationTasks()
-    }
-
-    /** Startet den Live-Sync (flusht u.a. die Sende-Queue; Gegenstück: [stopLiveSync]). */
-    suspend fun startLiveSync() {
-        if (syncService != null) return
-        val service = client.syncService().finish()
-        service.start()
-        syncService = service
-    }
-
-    suspend fun stopLiveSync() {
-        val service = syncService ?: return
-        syncService = null
-        runCatching { service.stop() }.getOrThrow()
-        runCatching { service.close() }
     }
 
     suspend fun joinRoom(roomId: String): Room = client.joinRoomById(roomId)
@@ -65,7 +50,7 @@ class RawBobClient private constructor(
         val timeline = room.timeline()
         try {
             timeline.send(timeline.createMessageContent(MessageType.Text(TextMessageContent(body, null)))!!)
-            // Send-Queue flushen: SyncService für Bob starten (eine Runde genügt).
+            // Upload der Queue: syncOnce (syncOnceV2) nach dem Senden.
         } finally {
             runCatching { timeline.close() }
         }
@@ -77,12 +62,7 @@ class RawBobClient private constructor(
 
     fun userId(): String = client.userId()
 
-    suspend fun close() {
-        syncService?.let { service ->
-            syncService = null
-            runCatching { service.stop() }
-            runCatching { service.close() }
-        }
+    fun close() {
         runCatching { client.close() }
         runCatching { storeScope.cancel() }
     }
@@ -97,15 +77,17 @@ class RawBobClient private constructor(
             val state = File(root, "bob-state").apply { mkdirs() }
             val cache = File(root, "bob-cache").apply { mkdirs() }
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            val builder = ClientBuilder()
-            builder.homeserverUrl(homeserverUrl)
-            builder.sqliteStore(
-                SqliteStoreBuilder(
-                    state.resolve("state.sqlite").absolutePath,
-                    cache.absolutePath,
-                ),
-            )
-            val client = builder.build()
+            // UniFFI-Builder sind immutable (self: Arc<Self> -> Arc<Self>):
+            // Setter-Rueckgaben verketten, sonst geht die Config verloren.
+            val client = ClientBuilder()
+                .homeserverUrl(homeserverUrl)
+                .sqliteStore(
+                    SqliteStoreBuilder(
+                        state.resolve("state.sqlite").absolutePath,
+                        cache.absolutePath,
+                    ),
+                )
+                .build()
             try {
                 client.login(username, password, "KaiLinkE2E-Bob", null)
             } catch (t: Throwable) {
