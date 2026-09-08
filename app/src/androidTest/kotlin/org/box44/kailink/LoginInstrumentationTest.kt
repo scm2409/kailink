@@ -15,7 +15,7 @@ class LoginInstrumentationTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         assertEquals("org.box44.kailink", context.packageName)
-        assertEquals("0.2.0-phase1", packageInfo.versionName)
+        assertEquals("0.2.1-phase1", packageInfo.versionName)
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 assertEquals("https://matrix.org", activity.findViewById<EditText>(R.id.input_homeserver).text.toString())
