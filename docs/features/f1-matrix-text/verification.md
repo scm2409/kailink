@@ -23,15 +23,20 @@
   `/_matrix/client/v3/register`.
 - Reine JVM-Prüfungen der Login-/Restore-Verträge, des Sendens und der
   Timeline-Reduktion gegen den Testdouble.
+- Android-Instrumentierung auf dem ATD-Emulator `kailink-atd35` (Android 15,
+  x86_64): `LoginInstrumentationTest.packageMetadataAndMatrixOrgPrefill` →
+  `OK (1 test)`. Geprüft wurden Application-ID, Versionsname und das sichtbare
+  Homeserver-Prefill `https://matrix.org`.
 
 ## Nicht durch den E2E-Lauf abgedeckt
 
 Das Skript ist ein Shell-/HTTP-Harness und startet keine Android-Runtime. Daher
 wurden Matrix-SDK-Login/Restore, echtes Senden und Empfangen, E2EE-Entschlüsselung
 mit dem persistenten Rust-SDK-Krypto-Store, Matrix-Pusher-Registrierung und der
-Android-Notification-Pfad nicht als bestanden behauptet. Diese Pfade sind auf
-GrapheneOS beziehungsweise durch einen künftigen instrumentierten Android-
-Lauf zu prüfen.
+Android-Notification-Pfad nicht als bestanden behauptet. Die vorhandene
+Android-Instrumentierung prüft bislang nur Paketmetadaten und das Login-Prefill;
+der vollständige Matrix-/E2EE-/Pusher-Lauf gegen den lokalen Homeserver ist
+weiterhin offen und nicht als bestanden behauptet.
 
 ## Manuell auf dem Gerät
 
