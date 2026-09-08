@@ -1,17 +1,40 @@
-# f1-matrix-text – verification.md
+# f1-matrix-text – Verifikation
 
-- V1: `LoginViewModelChecks` (5), `RoomListViewModelChecks` (3),
-  `TimelineViewModelChecks` (5), `InMemoryChannelClientChecks` (6),
-  `TimelineReducerChecks` (9) — bestanden 2026-09-08, 39/39 gesamt,
-  siehe `../verification.md` (G8-Ist-Stand).
-- V2/V3: Offline-Build + Badging bestanden (`at.d71.kailink`, minSdk 28).
-- V4: MT-1 bis MT-5, MT-8 — **nicht beobachtet** (kein Gerät).
+## Beobachtet am 2026-09-08
 
-Phase 2 (2026-09-08, online — siehe `../verification.md`):
+- `./gradlew testDebugUnitTest` → `BUILD SUCCESSFUL`; die JUnit-Aufgabe ist
+  aktiv und umfasst die Login-, Restore-, Raumlisten-, Timeline-,
+  In-Memory-Testdouble- und Notification-Payload-Prüfungen.
+- `./gradlew testDebugUnitTest assembleDebug` → `BUILD SUCCESSFUL`.
+- `./scripts/e2e-local.sh` → `E2E-Smoke bestanden: Matrix-Homeserver und
+  lokales ntfy erreichbar.` sowie `E2E-Registrierung bestanden: zwei
+  disposable Testkonten angelegt.`
+- Der E2E-Lauf verwendete rootless Podman mit
+  `docker.io/matrixconduit/matrix-conduit:latest` und
+  `docker.io/binwiederhier/ntfy:latest`. Die Images wurden erfolgreich gezogen;
+  der Matrix-Endpoint `/_matrix/client/versions` und ntfy antworteten.
 
-- V1: `./gradlew testDebugUnitTest` (JUnit) → 39/39 (berichtsgetrieben über
-  `AllChecksTest`).
-- V2/V3: `./gradlew testDebugUnitTest assembleDebug` → `BUILD SUCCESSFUL`;
-  Badging `org.box44.kailink` `0.2.0-phase1`; `AppGraph` verdrahtet
-  `MatrixSdkChannelClient` (matrix-rust-sdk 26.09.08). Kompiliert und im
-  Debug-APK; Laufzeit gegen echten Homeserver **nicht beobachtet**.
+## Automatisiert bestanden
+
+- Build und normale JUnit-Ausführung.
+- Start des lokalen Matrix-Homeservers und Erreichbarkeit per HTTP.
+- Start des lokalen ntfy-Dienstes und Erreichbarkeit per HTTP.
+- Registrierung zweier kurzlebiger Testkonten über
+  `/_matrix/client/v3/register`.
+- Reine JVM-Prüfungen der Login-/Restore-Verträge, des Sendens und der
+  Timeline-Reduktion gegen den Testdouble.
+
+## Nicht durch den E2E-Lauf abgedeckt
+
+Das Skript ist ein Shell-/HTTP-Harness und startet keine Android-Runtime. Daher
+wurden Matrix-SDK-Login/Restore, echtes Senden und Empfangen, E2EE-Entschlüsselung
+mit dem persistenten Rust-SDK-Krypto-Store, Matrix-Pusher-Registrierung und der
+Android-Notification-Pfad nicht als bestanden behauptet. Diese Pfade sind auf
+GrapheneOS beziehungsweise durch einen künftigen instrumentierten Android-
+Lauf zu prüfen.
+
+## Manuell auf dem Gerät
+
+Martin prüft auf GrapheneOS Login gegen `https://matrix.org`, Restore nach
+Prozessneustart, E2EE-Raum und Empfang, UnifiedPush-Distributor/Endpoint,
+Push-Sync und Notification. Die Emoji-Verifikation erfolgt in Element X.

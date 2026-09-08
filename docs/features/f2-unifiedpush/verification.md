@@ -1,19 +1,37 @@
-# f2-unifiedpush – verification.md
+# f2-unifiedpush – Verifikation
 
-- V1: `PushControllerChecks` (4) und `PushChainChecks` (3) — bestanden
-  2026-09-08, 39/39 gesamt, siehe `../verification.md`.
-- V2/V3: Offline-Build bestanden; Manifest ohne Receiver (Phase 1 bewusst).
-- V4: MT-6 — **nicht beobachtet** (kein Gerät).
+## Beobachtet am 2026-09-08
 
-Phase 2 (2026-09-08, online — siehe `../verification.md`):
+- `./gradlew testDebugUnitTest assembleDebug` → `BUILD SUCCESSFUL`.
+- `./scripts/e2e-local.sh` startete erfolgreich zwei rootless-Podman-Container:
+  `docker.io/matrixconduit/matrix-conduit:latest` und
+  `docker.io/binwiederhier/ntfy:latest`.
+- Beobachtete Ausgaben:
+  - `E2E-Smoke bestanden: Matrix-Homeserver und lokales ntfy erreichbar.`
+  - `E2E-Registrierung bestanden: zwei disposable Testkonten angelegt.`
+- Der Harness prüfte HTTP-Erreichbarkeit des Matrix-
+  `/_matrix/client/versions`-Endpoints, die ntfy-HTTP-Erreichbarkeit und die
+  Registrierung zweier kurzlebiger Konten.
 
-- V1: `./gradlew testDebugUnitTest` (JUnit) → 39/39 (Push-Kette weiterhin
-  JVM-geprüft; `PushChainChecks` jetzt mit Endpoint
-  `https://push.phase1.local/org-box44-kailink/endpoint`).
-- V2/V3: `./gradlew testDebugUnitTest assembleDebug` → `BUILD SUCCESSFUL`;
-  Manifest enthält `.data.push.KaiLinkPushReceiver` (`exported=false`) mit
-  `MESSAGE`, `NEW_ENDPOINT`, `REGISTRATION_FAILED`, `UNREGISTERED`;
-  `UnifiedPushRegistrar` (connector 3.3.5) ist `PushRegistrationTrigger`
-  in `AppGraph`.
-- V4: Laufzeit gegen echten UnifiedPush-Distributor — **nicht beobachtet**
-  (kein Gerät).
+## Automatisiert bestanden
+
+- JVM-Prüfungen des Push-Zustandsautomaten.
+- Konfigurationsprüfung des Standard-Gateways
+  `https://ntfy.sh/_matrix/push/v1/notify`.
+- Prüfung der Endpoint-Rotation und erneuten Registrierung auf Vertragsebene.
+- Start und HTTP-Smoke-Test der lokalen Matrix-/ntfy-Infrastruktur.
+
+## Nicht durch den lokalen Harness abgedeckt
+
+Der Shell-Harness besitzt keine Android-Runtime und keinen UnifiedPush-
+Distributor. Deshalb wurden die tatsächliche Connector-Distributor-Auswahl,
+Topic-Auslieferung, Matrix-HTTP-Pusher-Registrierung gegen den Testserver,
+Push-Wake, SDK-Sync, E2EE-Entschlüsselung und Android-Notification nicht als
+lokal bestanden behauptet.
+
+## Manuell auf dem Gerät
+
+Auf Martins GrapheneOS-Gerät sind Distributor-Auswahl, Endpoint-Rotation,
+Push-Sync und Notification zu prüfen. Die Runtime-Berechtigung
+`POST_NOTIFICATIONS` und die Emoji-Verifikation in Element X sind ebenfalls
+manuell. Reale matrix.org-Zugangsdaten werden nicht im Harness verwendet.
