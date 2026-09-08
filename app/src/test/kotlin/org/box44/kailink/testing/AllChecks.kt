@@ -10,6 +10,7 @@ fun runAllChecks() {
     timelineReducerChecks()
     fileSessionStoreChecks()
     pushControllerChecks()
+    pushNotificationPayloadChecks()
     loginViewModelChecks()
     roomListViewModelChecks()
     timelineViewModelChecks()
