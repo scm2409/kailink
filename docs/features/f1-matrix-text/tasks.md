@@ -10,6 +10,10 @@ Erledigt (Phase 1):
 
 Offen (Phase 2):
 
-- [ ] Adaptertausch auf `MatrixSdkChannelClient` (matrix-rust-sdk).
+- [x] Adaptertausch auf `MatrixSdkChannelClient` (matrix-rust-sdk).
+      *(2026-09-08: kompilierfähiger Adapter im Build, in `AppGraph`
+      verdrahtet; Laufzeit gegen echten Homeserver noch nicht beobachtet.)*
 - [ ] E2EE: Krypto-Store, Unable-to-Decrypt-Darstellung.
+      *(Teilstand 2026-09-08: SQLite-Store konfiguriert,
+      UTD-Erkennung im Adapter vorhanden — Verifizierung offen.)*
 - [ ] Compose-Umstellung der Screens (ViewModels bleiben).

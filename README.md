@@ -1,68 +1,71 @@
 # KaiLink
 
 KaiLink ist ein Proof-of-Concept (PoC) eines Android-Messengers auf Basis von
-[Matrix](https://matrix.org/). Phase 1 liefert ein **vollständig offline
+[Matrix](https://matrix.org/). Phase 1 lieferte ein **vollständig offline
 baubares Fundament**: Domänenschicht mit Nahtstellen, Anmeldung mit
 Sitzungswiederherstellung, Raumliste, Chronik mit Senden, eine
 Push-Abstraktion mit Zustandsautomat sowie geprüfte JVM-Verifikation.
-Benachrichtigungen sind später über [UnifiedPush](https://unifiedpush.org/)
-angebunden (ohne Google/FCM).
 
-> **Status: Phase 1 (PoC).** Der Kanaldienst läuft in Phase 1 als
-> dokumentierte In-Memory-Simulation (`InMemoryChannelClient`); der echte
-> Matrix-Adapter (`matrix-rust-sdk`) ist als Phase-2-Artefakt vorbereitet
-> (Referenz unter `app/src/phase2/`, siehe
-> [`docs/architecture.md`](docs/architecture.md)).
+> **Status: Phase 2 (Stand 2026-09-08).** Der echte Matrix-Adapter
+> (`MatrixSdkChannelClient`, matrix-rust-sdk 26.09.08) und die
+> [UnifiedPush](https://unifiedpush.org/)-Anbindung (`UnifiedPushRegistrar` +
+> `KaiLinkPushReceiver`, connector 3.3.5, ohne Google/FCM) sind kompiliert
+> und in `AppGraph` verdrahtet; `testDebugUnitTest assembleDebug` ist grün.
+> Laufzeit gegen echten Homeserver/Distributor ist noch nicht beobachtet
+> (kein Gerät in dieser Umgebung) — siehe
+> [`docs/architecture.md`](docs/architecture.md).
 
 ## Kernentscheidungen
 
 | Entscheidung | Begründung |
 | --- | --- |
-| Phase 1: In-Memory-Kanal hinter `ChannelClient` | Die Bedingungen dieser Umgebung erlauben keinen Netzwerkzugriff; die Schnittstelle bleibt identisch, der Adapter ist austauschbar (G5) |
-| Phase 2: echtes `matrix-rust-sdk` | Offizielle Rust-Implementierung inkl. E2EE (Olm/Megolm); Referenzadapter liegt unter `app/src/phase2/` |
+| Phase 1: In-Memory-Kanal hinter `ChannelClient` | Die Bedingungen der ersten Phase erlaubten keinen Netzwerkzugriff; die Schnittstelle blieb identisch, der Adapter war austauschbar (G5) |
+| Phase 2: echtes `matrix-rust-sdk` | Offizielle Rust-Implementierung inkl. E2EE (Olm/Megolm); `MatrixSdkChannelClient` ist seit 2026-09-08 im Build und verdrahtet |
 | Push-Abstraktion (`PushController` + `PushRegistrationTrigger`) | Zustandsautomat ist JVM-getestet; Phase 2 tauscht nur den Trigger gegen den UnifiedPush-Connector |
-| Phase 1: Android-Framework-Views | Jetpack-Compose-Artefakte sind im lokalen Offline-Cache nicht vorhanden; die UI-Schicht ist so geschnitten, dass Phase 2 auf Compose umstellen kann |
+| Android-Framework-Views | Jetpack-Compose-Artefakte sind im lokalen Offline-Cache nicht vorhanden; die UI-Schicht ist so geschnitten, dass Phase 2 auf Compose umstellen kann |
 | Kein Google/FCM-Code im Repo | Projektverfassung, siehe [`docs/project-constitution.md`](docs/project-constitution.md) |
 
-## Offline-Build (diese Umgebung)
+## Build (diese Umgebung)
 
 Voraussetzungen: JDK 21 (bereit über `mise.toml`), Android SDK unter
 `/home/dev/android-sdk` (eingetragen in `local.properties`, nicht im Repo),
-Gradle Wrapper 9.1.0, AGP 8.13.2, Kotlin 2.2.21 — alle Artefakte ausschließlich
-aus dem lokalen Gradle-Cache:
+Gradle Wrapper 9.1.0, AGP 8.13.2, Kotlin 2.2.21.
 
 ```bash
-./gradlew --offline :app:phase1Checks :app:assembleDebug   # JVM-Prüfungen + Debug-APK
-./gradlew --offline check                                  # inkl. Lint (abortOnError=false)
+./gradlew testDebugUnitTest assembleDebug   # JVM-Prüfungen (JUnit) + Debug-APK
+./gradlew check                             # inkl. Lint (abortOnError=false)
 ```
 
+Beobachtet am 2026-09-08: `BUILD SUCCESSFUL`; JUnit-Bericht `tests="1"
+failures="0"` (der Test führt alle 39 Prüfgruppen-Checks aus), Prüfbericht
+unter `app/build/reports/phase1-checks.txt` (39/39 bestanden), siehe
+[`docs/features/verification.md`](docs/features/verification.md).
 Ergebnis: `app/build/outputs/apk/debug/app-debug.apk`
-(`at.d71.kailink`, versionName `0.1.0-phase1`, minSdk 28, targetSdk 36).
-Die JVM-Prüfungen laufen über die eigene Aufgabe `phase1Checks`, weil JUnit
-im lokalen Cache nicht verfügbar ist; der Prüfbericht liegt unter
-`app/build/reports/phase1-checks.txt` (39/39 bestanden, Stand 2026-09-08,
-siehe [`docs/features/verification.md`](docs/features/verification.md)).
+(`org.box44.kailink`, versionName `0.2.0-phase1`, minSdk 28, targetSdk 36,
+inkl. `libmatrix_sdk_ffi.so` des matrix-rust-sdk).
 
 ## Projektstruktur
 
 ```
-app/src/main/kotlin/at/d71/kailink/
+app/src/main/kotlin/org/box44/kailink/
 ├── domain/          Reine Domänenlogik ohne Android-Abhängigkeiten (JVM-testbar)
 │   ├── model/       Session, Room, Message
-│   ├── ChannelClient.kt    Kanal-Nahtstelle (In-Memory-Adapter implementiert sie)
+│   ├── ChannelClient.kt    Kanal-Nahtstelle (Adapter implementieren sie)
 │   ├── SessionStore.kt     Sitzungspersistenz-Vertrag
 │   ├── TimelineReducer.kt  Reduziert Chronik-Patches auf den UI-Zustand
 │   ├── push/        Push-Nahtstellen (PushState, PushRegistrationTrigger)
 │   └── speech/      Sprach-Nahtstellen (STT/TTS, No-Op-Implementierung)
 ├── data/
-│   ├── channel/     InMemoryChannelClient (Phase-1-Kanalsimulation)
-│   ├── push/        PushController (Zustandsautomat), SimulatedPushTrigger
+│   ├── channel/     InMemoryChannelClient (JVM-Referenz für Prüfungen)
+│   ├── matrix/      MatrixSdkChannelClient (matrix-rust-sdk, produktiv)
+│   ├── push/        PushController, UnifiedPushRegistrar, KaiLinkPushReceiver,
+│   │                SimulatedPushTrigger (JVM-Referenz)
 │   └── session/     FileSessionStore (Properties-Datei, App-privat)
-├── di/              AppGraph (manuelle Verdrahtung)
+├── di/              AppGraph (manuelle Verdrahtung: Matrix + UnifiedPush)
 ├── ui/              Framework-Views + ViewModels (Login, Raumliste, Chronik)
 └── MainActivity.kt  Eine Activity, drei umgeschaltete Screens
-app/src/phase2/      Nicht kompilierte Referenz: MatrixSdkChannelClient
-app/src/test/        Phase-1-JVM-Prüfungen (phase1Checks)
+app/src/phase2/      Quellpfad des Matrix-Adapters (in main eingebunden)
+app/src/test/        JVM-Prüfungen (JUnit: AllChecksTest → 39 Checks)
 docs/                Deutsche Dokumentation (Verfassung, Architektur, Protokolle)
 ```
 

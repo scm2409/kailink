@@ -23,6 +23,11 @@ class PushController(
     private val _state = MutableStateFlow(PushState.NOT_AVAILABLE)
     val state: StateFlow<PushState> = _state.asStateFlow()
 
+    /** Zuletzt erfolgreich am Kanal registrierter Endpoint (für Rotation). */
+    @Volatile
+    var lastRegisteredEndpoint: String? = null
+        private set
+
     /** Distributor gefunden; die eigentliche Registrierung läuft asynchron. */
     fun onDistributorAvailable() {
         _state.value = PushState.READY
@@ -33,12 +38,18 @@ class PushController(
         _state.value = PushState.NOT_AVAILABLE
     }
 
-    /** UnifiedPush hat einen neuen (ggf. rotierten) Endpoint geliefert. */
+    /**
+     * UnifiedPush hat einen neuen (ggf. rotierten) Endpoint geliefert.
+     * Jeder geänderte Endpoint wird erneut registriert (Re-Registration);
+     * die Registrierung läuft gegen die Kanalschicht und hält bei Erfolg
+     * [lastRegisteredEndpoint] aktuell.
+     */
     fun onNewEndpoint(endpointUrl: String) {
         _state.value = PushState.READY
         scope.launch {
             try {
                 channelClient.registerPushEndpoint(endpointUrl)
+                lastRegisteredEndpoint = endpointUrl
                 _state.value = PushState.REGISTERED
                 onLog("Push-Endpoint als Matrix-Pusher registriert")
             } catch (t: Throwable) {

@@ -14,12 +14,14 @@
     <string name="rooms_empty">Keine Räume gefunden.</string>
     <string name="rooms_logged_in_as">Angemeldet: %1$s</string>
     <string name="rooms_logged_in">Angemeldet</string>
-    <string name="push_registered">Push: registriert (UnifiedPush-Simulator)</string>
+    <string name="push_registered">Push: registriert (UnifiedPush)</string>
     <string name="push_ready">Push: Registrierung läuft …</string>
     <string name="push_not_available">Push: kein Distributor gefunden</string>
     <string name="push_failed">Push: Registrierung fehlgeschlagen</string>
+    <string name="push_notification_channel_name">Push-Nachrichten</string>
+    <string name="push_notification_channel_description">Benachrichtigungen über neue Nachrichten, ausgelöst durch UnifiedPush</string>
     <string name="timeline_back">Zurück</string>
     <string name="timeline_send">Senden</string>
     <string name="timeline_draft_hint">Nachricht …</string>
-    <string name="phase1_note">Phase 1: Kanalsimulation; es werden keine Netzwerkverbindungen aufgebaut.</string>
+    <string name="phase1_note">KaiLink verbindet sich mit dem angegebenen Matrix-Homeserver.</string>
 </resources>

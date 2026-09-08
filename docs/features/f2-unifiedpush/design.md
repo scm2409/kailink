@@ -8,5 +8,7 @@
   vorhanden → Endpoint → Registrierung; `simulateIncomingPush()` für den
   Sync-Pfad.
 - Phase 2: `UnifiedPushRegistrar` + `KaiLinkPushReceiver`
-  (BroadcastReceiver, `exported=false`) + Manifest-Einträge; Referenzcode
-  unter `app/src/phase2/`. Nur Trigger/Empfänger werden getauscht.
+  (BroadcastReceiver, `exported=false`) + Manifest-Einträge; seit
+  2026-09-08 implementiert unter `app/src/main/kotlin/org/box44/kailink/
+  data/push/` und in `AppGraph` verdrahtet. Nur Trigger/Empfänger wurden
+  getauscht.

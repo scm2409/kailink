@@ -1,6 +1,7 @@
 package org.box44.kailink.testing
 
 import org.box44.kailink.domain.ChannelException
+import org.box44.kailink.ui.login.LoginUiState
 import org.box44.kailink.ui.login.LoginViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +10,14 @@ import kotlinx.coroutines.SupervisorJob
 fun loginViewModelChecks() {
 
     fun viewModelScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+
+    Checks.check("Homeserver-Feld ist vorbelegt mit https://matrix.org") {
+        val viewModel = LoginViewModel(FakeChannelClient(), FakeSessionStore(), RecordingPushTrigger(), viewModelScope())
+
+        expectEquals("https://matrix.org", viewModel.ui.value.homeserverUrl, "Initiale Homeserver-URL")
+        expectEquals(LoginUiState.DEFAULT_HOMESERVER_URL, viewModel.ui.value.homeserverUrl, "Konstante und Zustand identisch")
+        viewModel.clear()
+    }
 
     Checks.check("Erfolgreiche Anmeldung setzt loggedIn und registriert Push") {
         val client = FakeChannelClient()

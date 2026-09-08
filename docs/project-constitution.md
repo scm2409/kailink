@@ -63,7 +63,7 @@ werden nie stillschweigend überschrieben.
 
 | Stufe | Mittel | Ohne Gerät möglich |
 | --- | --- | --- |
-| V1 | JVM-Prüfungen (`phase1Checks`, solange JUnit offline nicht verfügbar) | ja |
+| V1 | JVM-Prüfungen (Phase 1: `phase1Checks`, solange JUnit offline nicht verfügbar; seit 2026-09-08: JUnit-Test `AllChecksTest` in `testDebugUnitTest`) | ja |
 | V2 | Kompilierung + `assembleDebug` | ja |
 | V3 | Strukturprüfung (Manifest, Badging, APK-Inhalt) | ja |
 | V4 | Verhalten auf Gerät/Emulator | nein → manuelles Protokoll |

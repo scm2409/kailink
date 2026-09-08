@@ -6,3 +6,12 @@
   siehe `../verification.md` (G8-Ist-Stand).
 - V2/V3: Offline-Build + Badging bestanden (`at.d71.kailink`, minSdk 28).
 - V4: MT-1 bis MT-5, MT-8 — **nicht beobachtet** (kein Gerät).
+
+Phase 2 (2026-09-08, online — siehe `../verification.md`):
+
+- V1: `./gradlew testDebugUnitTest` (JUnit) → 39/39 (berichtsgetrieben über
+  `AllChecksTest`).
+- V2/V3: `./gradlew testDebugUnitTest assembleDebug` → `BUILD SUCCESSFUL`;
+  Badging `org.box44.kailink` `0.2.0-phase1`; `AppGraph` verdrahtet
+  `MatrixSdkChannelClient` (matrix-rust-sdk 26.09.08). Kompiliert und im
+  Debug-APK; Laufzeit gegen echten Homeserver **nicht beobachtet**.

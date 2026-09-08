@@ -1,7 +1,7 @@
 # Manuelles Testprotokoll (V4, Gerät/Emulator)
 
 **App:** KaiLink Phase 1, Debug-Build `app-debug.apk`
-(`applicationId at.d71.kailink`, versionName `0.1.0-phase1`, minSdk 28).
+(`applicationId org.box44.kailink`, versionName `0.2.0-phase1`, minSdk 28).
 
 **Vorbereitung (einmalig):**
 
@@ -43,7 +43,7 @@
    dieselbe Nutzerkennung wie in MT-1.
 4. **Abbruchfall (optional):** `session.properties` vor dem Start beschädigen
    (z. B. leere Datei unter
-   `/data/data/at.d71.kailink/files/kailink/`, nur mit Debug-Build
+   `/data/data/org.box44.kailink/files/kailink/`, nur mit Debug-Build
    `run-as` prüfbar) → Wiederherstellung schlägt fehl, deutsche
    Fehlermeldung, Sitzungsdatei wird gelöscht, Anmeldung bleibt nutzbar.
 

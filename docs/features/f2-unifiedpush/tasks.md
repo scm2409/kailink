@@ -9,5 +9,7 @@ Erledigt (Phase 1):
 
 Offen (Phase 2):
 
-- [ ] UnifiedPush-Connector einbinden (Trigger + Receiver + Manifest).
+- [x] UnifiedPush-Connector einbinden (Trigger + Receiver + Manifest).
+      *(2026-09-08: `UnifiedPushRegistrar`, `KaiLinkPushReceiver`,
+      Manifest-Eintrag; kompiliert, Tests 39/39.)*
 - [ ] NotificationClient-Verdrahtung (Benachrichtigungen) – optional.

@@ -22,20 +22,25 @@
     `onUnregistered()` für die Distributor-Lebenszyklen.
 - `data/push/SimulatedPushTrigger` (Phase 1): spielt den UnifiedPush-
   Distributor lokal — Distributor vorhanden → Endpoint
-  (`https://push.phase1.local/at-d71-kailink/endpoint`) → Registrierung;
+  (`https://push.phase1.local/org-box44-kailink/endpoint`) → Registrierung;
   `simulateIncomingPush()` löst den Sync-Pfad aus. Keine Berechtigungen,
   keine Google-Dienste, keine Netzwerkverbindung.
 
-## Phase-2-Ausblick
+## Phase-2-Verdrahtung (seit 2026-09-08)
 
-- `org.unifiedpush.android:connector` (Referenzcode unter
-  `app/src/phase2/` vorbereitet): `UnifiedPushRegistrar` als
-  `PushRegistrationTrigger`, `KaiLinkPushReceiver` als BroadcastReceiver
-  für die Connector-Aktionen (`MESSAGE`, `NEW_ENDPOINT`,
-  `REGISTRATION_FAILED`, `UNREGISTERED`, `TEMP_UNAVAILABLE`),
-  Manifest-Einträge wieder aufnehmen.
-- Der `PushController` bleibt unverändert; nur der Trigger und der
-  Empfänger werden getauscht.
+- `org.unifiedpush.android:connector` 3.3.5 ist eingebunden:
+  `UnifiedPushRegistrar` (in `data/push/`) ist als
+  `PushRegistrationTrigger` in `AppGraph` verdrahtet,
+  `KaiLinkPushReceiver` ist BroadcastReceiver für die Connector-Aktionen
+  (`MESSAGE`, `NEW_ENDPOINT`, `REGISTRATION_FAILED`, `UNREGISTERED`),
+  Manifest-Eintrag `exported=false`.
+- Registrierungsweg: `resolveDefaultDistributor` → vorhanden: `register()`;
+  keiner installiert: `NOT_AVAILABLE`; mehrere ohne Auswahl: deterministisch
+  der erste gemeldete Distributor (dokumentierte PoC-Grenze, nutzerfreundliche
+  Auswahl wäre LinkActivity des Connectors).
+- Der `PushController` blieb unverändert; nur Trigger und Empfänger wurden
+  getauscht. Beobachteter Stand: kompiliert, JVM-Prüfungen 39/39; Laufzeit
+  gegen echten Distributor nicht beobachtet.
 
 ## PoC-Grenzen
 

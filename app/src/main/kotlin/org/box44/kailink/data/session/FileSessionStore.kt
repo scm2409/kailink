@@ -7,10 +7,14 @@ import java.io.FileNotFoundException
 import java.util.Properties
 
 /**
- * Dateibasierte Sitzungspersistenz (App-privates Verzeichnis).
+ * Dateibasierte Sitzungspersistenz (App-privates Verzeichnis) als reine
+ * JVM-Referenz für Prüfungen (`FileSessionStoreChecks`) und als
+ * Referenzimplementierung des [SessionStore]-Vertrags.
  *
- * PoC-Bewusst ohne Keystore-Verschlüsselung; für Produktion ist
- * EncryptedFile/Keystore Pflicht (offener Punkt in docs/features/verification.md).
+ * Produktive Verdrahtung (Android): [AndroidKeystoreSessionStore] verschlüsselt
+ * denselben Eigenschaften-Block mit einem nicht exportierbaren
+ * AndroidKeyStore-Schlüssel (AES/GCM). Diese Klasse selbst speichert
+ * unverschlüsselt und ist bewusst nicht in `AppGraph` verdrahtet.
  */
 class FileSessionStore(
     private val file: File,
@@ -60,7 +64,7 @@ class FileSessionStore(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val KEY_USER_ID = "userId"
         const val KEY_DEVICE_ID = "deviceId"
         const val KEY_HOMESERVER_URL = "homeserverUrl"

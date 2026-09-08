@@ -15,14 +15,19 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class LoginUiState(
-    val homeserverUrl: String = "",
+    val homeserverUrl: String = DEFAULT_HOMESERVER_URL,
     val username: String = "",
     val password: String = "",
     val busy: Boolean = false,
     val busyLabel: String? = null,
     val error: String? = null,
     val loggedIn: Boolean = false,
-)
+) {
+    companion object {
+        /** Vorbelegter Standard-Homeserver (Anmeldeformular). */
+        const val DEFAULT_HOMESERVER_URL = "https://matrix.org"
+    }
+}
 
 /**
  * Steuert Anmeldung und automatische Sitzungswiederherstellung

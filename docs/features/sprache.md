@@ -4,7 +4,7 @@
 KaiLink ist als sprachnares Gerät gedacht; der PoC definiert die Nahtstellen,
 damit spätere Implementierungen ohne Umbau der UI/Logik einsetzbar sind.
 
-## Nahtstellen (Paket `at.d71.kailink.domain.speech`)
+## Nahtstellen (Paket `org.box44.kailink.domain.speech`)
 
 ```kotlin
 /** Spracheingabe: liefern Deutsche Utterances mit Finalitätsmarkierung. */

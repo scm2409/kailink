@@ -90,46 +90,58 @@ PushController  ──▶ ① onNewEndpoint → ChannelClient.registerPushEndpoi
 - **Krypto-Store (Phase 2):** SQLite über das Rust-SDK in
   `context.filesDir/matrix/store` — überlebt Neustarts (Voraussetzung E2EE).
 
-## 6. Verifizierte Abhängigkeiten (Offline-Stand: 2026-09-08)
+## 6. Verifizierte Abhängigkeiten
 
-Alle unten stehenden Artefakte sind im lokalen Gradle-Cache vorhanden und
-wurden durch einen erfolgreichen Offline-Build belegt (G3/G8; Details in
-[`features/verification.md`](features/verification.md)):
+**Phase-1-Stand (Offline, 2026-09-08):** Gradle 9.1.0, AGP 8.13.2,
+Kotlin 2.2.21, kotlinx-coroutines-android 1.7.3, Android platform 36,
+build-tools 35.0.0 — alle im lokalen Gradle-Cache vorhanden und durch einen
+erfolgreichen Offline-Build belegt (G3/G8; Details in
+[`features/verification.md`](features/verification.md)).
 
-| Artefakt | Version | Nachweis |
+**Phase-2-Stand (online, 2026-09-08):** zusätzlich eingebunden und durch
+`./gradlew testDebugUnitTest assembleDebug` (BUILD SUCCESSFUL) belegt:
+
+| Artefakt | Version | Rolle |
 | --- | --- | --- |
-| Gradle (Wrapper-Distribution) | 9.1.0 | `--offline` Build |
-| Android Gradle Plugin | 8.13.2 | `--offline` Build |
-| Kotlin (android) | 2.2.21 | `--offline` Build |
-| kotlinx-coroutines-android | 1.7.3 | `--offline` Build |
-| Android SDK platform | android-36 | Kompilierung |
-| Android SDK build-tools | 35.0.0 | Kompilierung (`buildToolsVersion` fixiert) |
+| org.matrix.rustcomponents:sdk-android | 26.09.08 | echter Matrix-Kanal (`MatrixSdkChannelClient`), Rust-`libmatrix_sdk_ffi.so` im APK |
+| org.unifiedpush.android:connector | 3.3.5 | UnifiedPush-Registrierung + Receiver |
+| junit:junit | 4.13.2 | JVM-Prüfungen als gewöhnliche JUnit-Aufgabe |
+| kotlinx-coroutines-test | 1.7.3 | Test-Klassepfad |
 
-**Bewusst nicht enthalten (Phase 1):** Jetpack Compose (Artefakte im
-Offline-Cache nicht vorhanden → Framework-Views), matrix-rust-sdk,
-UnifiedPush-Connector, JUnit (→ eigene Prüf-Aufgabe `phase1Checks`).
+Weiterhin nicht enthalten: Jetpack Compose (Screens bleiben Framework-Views;
+ViewModels sind davon unberührt).
 
-## 7. Bewusste PoC-Grenzen (Phase 1)
+## 7. Bewusste PoC-Grenzen (Stand 2026-09-08)
 
-1. Kanaldienst ist eine In-Memory-Simulation; keine echten Matrix-Nachrichten.
-2. E2EE entfällt in Phase 1 vollständig (Vorbereitung siehe
-   [`features/nachrichten-e2ee.md`](features/nachrichten-e2ee.md)).
+1. ~~Kanaldienst ist eine In-Memory-Simulation~~ — seit Phase 2 verdrahtet
+   `AppGraph` den echten `MatrixSdkChannelClient`; die In-Memory-Variante
+   bleibt als JVM-Referenz für Prüfungen erhalten. Laufzeit gegen einen
+   echten Homeserver ist noch nicht beobachtet (kein Gerät/Zugang).
+2. E2EE: SQLite-Krypto-Store ist konfiguriert, UTD-Erkennung im Adapter
+   vorhanden; vollständige Verifizierung (Geräte, Verifizierungsabläufe)
+   offen (siehe [`features/nachrichten-e2ee.md`](features/nachrichten-e2ee.md)).
 3. Persistenz der Domänensitzung ohne Android-Keystore.
-4. Push zeigt keine Benachrichtigungen; Push = Zustandskette + Sync-Auslösung.
-5. Kein Hintergrund-Dienst (WorkManager) — Sync nur im Vordergrund bzw. per
-   simuliertem Push.
-6. Sprach-Nahtstellen haben nur No-Op-Implementierungen.
+4. Push: UnifiedPush-Registrar/Receiver sind verdrahtet; Benachrichtigungen
+   werden nicht gerendert; Laufzeit gegen echten Distributor nicht beobachtet.
+5. Kein Hintergrund-Dienst (WorkManager) — Sync im Vordergrund bzw. per
+   Push ausgelöst.
+6. Mehrere installierte UnifiedPush-Distributoren ohne Nutzerwahl: der
+   Registrar wählt deterministisch den ersten gemeldeten (dokumentierte
+   Grenze).
+7. Sprach-Nahtstellen haben nur No-Op-Implementierungen.
 
 ## 8. Migrationspfad Phase 2
 
-1. `InMemoryChannelClient` → `MatrixSdkChannelClient` (Referenz liegt
-   vollständig vor: `app/src/phase2/kotlin/at/d71/kailink/data/matrix/`);
-   `AppGraph` ist die einzige Änderungsstelle.
+1. `InMemoryChannelClient` → `MatrixSdkChannelClient`; `AppGraph` ist die
+   einzige Änderungsstelle. *(erledigt 2026-09-08, inkl. Umzug der Pakete
+   nach `org.box44.kailink`)*
 2. `SimulatedPushTrigger` → `UnifiedPushRegistrar` + `KaiLinkPushReceiver`
-   (Manifest-Receiver-Einträge wieder aufnehmen).
+   (Manifest-Receiver-Einträge wieder aufnehmen). *(erledigt 2026-09-08)*
 3. Framework-Views → Jetpack Compose (Screens 1:1 auf `@Composable` abbilden;
-   ViewModels bleiben unverändert).
+   ViewModels bleiben unverändert). *(offen)*
 4. JUnit 4/5 + `kotlinx-coroutines-test` einbinden und die Prüfungen von
    `phase1Checks` auf reguläre `testDebugUnitTest`-Tests umstellen.
+   *(erledigt 2026-09-08: JUnit 4, `AllChecksTest`)*
 5. `INTERNET`-Nutzung: echte Homeserver-Kommunikation; `POST_NOTIFICATIONS`
-   für Push-Benachrichtigungen.
+   für Push-Benachrichtigungen. *(offen; `INTERNET` ist deklariert,
+   Laufzeitnachweis steht aus)*

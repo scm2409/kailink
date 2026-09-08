@@ -2,6 +2,7 @@ package org.box44.kailink.testing
 
 import org.box44.kailink.data.push.PushController
 import org.box44.kailink.domain.ChannelException
+import org.box44.kailink.domain.push.PushConfiguration
 import org.box44.kailink.domain.push.PushState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -63,5 +64,36 @@ fun pushControllerChecks() {
         controller.onNewEndpoint("https://push.example.org/endpoint")
 
         expectEquals(PushState.FAILED, controller.state.value, "Zustand nach Fehler")
+    }
+
+    Checks.check("PushConfiguration: Standard-Gateway und App-ID") {
+        expectEquals(
+            "https://ntfy.sh/_matrix/push/v1/notify",
+            PushConfiguration.DEFAULT_GATEWAY_URL,
+            "DEFAULT_GATEWAY_URL",
+        )
+        expectEquals("org.box44.kailink", PushConfiguration.DEFAULT_APP_ID, "DEFAULT_APP_ID")
+        val configuration = PushConfiguration()
+        expectEquals(PushConfiguration.DEFAULT_GATEWAY_URL, configuration.gatewayUrl, "Standard-Gateway")
+        expectEquals(PushConfiguration.DEFAULT_APP_ID, configuration.appId, "Standard-App-ID")
+    }
+
+    Checks.check("Endpoint-Rotation: jeder geänderte Endpoint wird erneut registriert") {
+        val client = FakeChannelClient()
+        val controller = controllerWith(client)
+
+        controller.onNewEndpoint("https://push.example.org/endpoint-1")
+        controller.onNewEndpoint("https://push.example.org/endpoint-2")
+
+        expectEquals(
+            listOf(
+                "https://push.example.org/endpoint-1",
+                "https://push.example.org/endpoint-2",
+            ),
+            client.registerEndpointCalls,
+            "beide Endpoints an Kanalschicht registriert",
+        )
+        expectEquals("https://push.example.org/endpoint-2", controller.lastRegisteredEndpoint, "zuletzt registriert")
+        expectEquals(PushState.REGISTERED, controller.state.value, "Zustand nach Rotation")
     }
 }

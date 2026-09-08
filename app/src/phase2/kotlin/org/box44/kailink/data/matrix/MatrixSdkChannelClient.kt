@@ -41,6 +41,7 @@ import org.matrix.rustcomponents.sdk.TimelineDiff
 import org.matrix.rustcomponents.sdk.TimelineItem
 import org.matrix.rustcomponents.sdk.TimelineItemContent
 import org.matrix.rustcomponents.sdk.TimelineListener
+import org.box44.kailink.domain.push.PushConfiguration
 
 /**
  * Adapter auf das echte matrix-rust-sdk (org.matrix.rustcomponents:sdk-android).
@@ -56,7 +57,8 @@ class MatrixSdkChannelClient(
     private val storeDir: File,
     private val cacheDir: File,
     private val scope: CoroutineScope,
-    private val appId: String = DEFAULT_APP_ID,
+    private val appId: String = PushConfiguration.DEFAULT_APP_ID,
+    private val gatewayUrl: String = PushConfiguration.DEFAULT_GATEWAY_URL,
     private val onLog: (String) -> Unit = {},
 ) : ChannelClient {
 
@@ -252,8 +254,12 @@ class MatrixSdkChannelClient(
     override suspend fun registerPushEndpoint(endpointUrl: String) {
         val c = client ?: throw ChannelException("Keine aktive Sitzung")
         try {
+            // Push-Gateway-Trennung (docs/features/push.md): der UnifiedPush-
+            // Endpoint ist der `pushkey`, das HttpPusherData zeigt auf das
+            // Matrix-Push-Gateway ([gatewayUrl], Standard: ntfy), das die
+            // Matrix-Push-Nachricht an den Distributor übersetzt.
             val identifiers = PusherIdentifiers(pushkey = endpointUrl, appId = appId)
-            val data = HttpPusherData(endpointUrl, PushFormat.EVENT_ID_ONLY, null)
+            val data = HttpPusherData(gatewayUrl, PushFormat.EVENT_ID_ONLY, null)
             c.setPusher(
                 identifiers,
                 PusherKind.Http(data),
@@ -263,7 +269,7 @@ class MatrixSdkChannelClient(
                 LANG,
                 true,
             )
-            onLog("UnifiedPush-Endpoint als Matrix-Pusher registriert")
+            onLog("UnifiedPush-Endpoint als Matrix-Pusher registriert (Gateway: $gatewayUrl)")
         } catch (t: Throwable) {
             throw ChannelException("Pusher-Registrierung fehlgeschlagen: ${t.message ?: "unbekannter Fehler"}", t)
         }
@@ -380,7 +386,6 @@ class MatrixSdkChannelClient(
     }
 
     companion object {
-        const val DEFAULT_APP_ID = "org.box44.kailink"
         private const val DEVICE_NAME = "KaiLink"
         private const val APP_DISPLAY_NAME = "KaiLink"
         private const val DEVICE_DISPLAY_NAME = "KaiLink Android"
