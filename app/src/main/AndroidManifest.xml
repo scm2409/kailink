@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name=".KaiLinkApp"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.KaiLink">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".data.push.KaiLinkPushReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.MESSAGE" />
+                <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
+                <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
+                <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
+                <action android:name="org.unifiedpush.android.connector.TEMP_UNAVAILABLE" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

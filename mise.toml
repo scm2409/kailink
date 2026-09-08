@@ -1,0 +1,17 @@
+# mise-Konfiguration für KaiLink (siehe https://mise.jdx.dev/)
+# Stellt JDK 21 bereit und setzt das Android SDK auf einen benutzerlokalen
+# Pfad — bewusst KEINE systemweite Installation (Projektverfassung, Grundsatz G6).
+
+[tools]
+java = "21.0.2"
+
+[env]
+# Lokales Android SDK (per-User installiert, z. B. über die offiziellen
+# cmdline-tools). Der Pfad wird von Gradle über local.properties bzw. die
+# Umgebung ausgewertet.
+ANDROID_HOME = "{{ env.HOME }}/.local/share/android-sdk"
+ANDROID_SDK_ROOT = "{{ env.HOME }}/.local/share/android-sdk"
+
+[settings]
+# Go-ähnliche deterministische Installationen sind nicht nötig; wir nutzen
+# mise ausschließlich für das JDK.

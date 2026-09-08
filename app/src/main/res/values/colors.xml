@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#1B5E5A</color>
+    <color name="error_text">#B3261E</color>
+    <color name="secondary_text">#5F6368</color>
+    <color name="bubble_incoming">#E8F0FE</color>
+    <color name="bubble_outgoing">#C8E6C9</color>
+</resources>

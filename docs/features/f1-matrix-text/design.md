@@ -1,0 +1,3 @@
+# f1-matrix-text – design.md
+
+Dokumentationsgerüst; Details sind in den bestehenden Feature-Dokumenten und werden vor der nächsten Implementierungsrunde vervollständigt.
