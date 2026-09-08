@@ -25,3 +25,22 @@
   Namespace `uniffi.matrix_sdk_crypto`; die optionale Testkonfiguration setzt
   `CollectStrategy.ALL_DEVICES` und `DecryptionSettings(TrustRequirement.UNTRUSTED)`.
   Cross-Signing und Key-Backup werden nicht getestet oder behauptet.
+
+- UniFFI-Builder sind immutable (Quelle:
+  `bindings/matrix-sdk-ffi/src/client_builder.rs` im matrix-rust-sdk —
+  jeder Setter nimmt `self: Arc<Self>` und gibt einen NEUEN Builder
+  zurueck). `MatrixSdkChannelClient.buildClient` ignorierte die
+  Rueckgaben — der Build lief ohne jede Config
+  (`ClientBuildError: ... must be called`). Fix: Rueckgaben verketten
+  (`builder = builder.homeserverUrl(...)` etc.). Der Login-Pfad
+  funktionierte zuvor nie, daher keine Nutzerverhaltensänderung.
+- Cleartext nur in `emulatorDebug`: `network_security_config.xml`
+  (`cleartextTrafficPermitted=true` nur fuer `10.0.2.2`, `127.0.0.1`,
+  `localhost`, `192.168.42.20`) + Manifest-Overlay mit
+  `android:networkSecurityConfig`. Beweis: `aapt`-Dump des
+  `app-emulatorDebug.apk` zeigt `networkSecurityConfig`,
+  `app-debug.apk` enthaelt es nicht. `androidTest`-Manifest wirkt nicht
+  (Test-APK-Prozess folgt der App-Policy).
+- Conduit-Grenzen: kein Sliding Sync (`VersionIsMissing` bei
+  `syncService().finish()`) — E2E nutzt `syncOnce`; Emulator-Netz defekt
+  (`10.0.2.2` unerreichbar) — Lauf nutzt `adb reverse` nach `127.0.0.1`.

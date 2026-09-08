@@ -75,3 +75,44 @@ wird deshalb nicht als Push-Erfolg gewertet.
 Martin prüft auf GrapheneOS Login gegen `https://matrix.org`, Restore nach
 Prozessneustart, E2EE-Raum und Empfang, UnifiedPush-Distributor/Endpoint,
 Push-Sync und Notification. Die Emoji-Verifikation erfolgt in Element X.
+
+## Zwei-Konten-Matrix-E2E (Chunk A + B) — GRUEN am 2026-09-08
+
+Reproduzierbar via `./scripts/emulator-e2e.sh` (Conduit+ntfy, adb reverse,
+Konten, beide APKs, `am instrument` — ein Befehl, Exit 0).
+
+- Test: `org.box44.kailink.MatrixE2eTest#twoAccountTimelineDeliveryUnencrypted`
+  (Alice = SUT ueber `MatrixSdkChannelClient`, Bob = roher SDK-Client
+  `RawBobClient`; Homeserver `http://127.0.0.1:6167` via `adb reverse`).
+- Ergebnis (Gate-Lauf): `Time: 152.644` / `OK (1 test)`.
+- Chunk A (unverschluesselt): beidseitiger Login, `createRoom` mit
+  Bob-Einladung, Bob-Join, Bob-Send, Alice-Timeline-Polling mit hartem
+  Assert `body == gesendet && state == SENT` — bestanden.
+- Restore-Leg: `dispose` (ohne `logout`), neu konstruieren, `restore` aus
+  `FileSessionStore`, `syncOnce`, `rooms()` enthaelt den Raum —
+  `Restore-Leg ok` (Logcat).
+- Chunk B (verschluesselt, `encrypted=true`, Alice mit `E2eeTestConfig`
+  = `CollectStrategy.ALL_DEVICES` + `DecryptionSettings(UNTRUSTED)`):
+  gleicher Ablauf, hartes Assert `body`-Gleichheit + `SENT`
+  (kein UNDECRYPTABLE-Platzhalter) — `E2E B ok` (Logcat).
+  Bob-Join VOR Timeline-Abo, je 2 `syncOnce`-Runden nach Join und Send
+  (Room-Key-Sharing braucht mehrere Durchlaeufe).
+- Beweis-Auszug Logcat: `Alice hat empfangen: id=$0rgHhcbkk... state=SENT`,
+  `E2E B ok: id=$dBEGG8MPre... state=SENT`.
+- Container-Digests im Gate-Log:
+  ntfy `sha256:6ef4b819f722fccdc036af611c4774cfdc2de821ab74fdd48bbf4c9d6f8973da`,
+  conduit `sha256:b0d24248e94f944ca49f90f10c429e3d65f4472bdde25661ecea9840134fb133`.
+
+## Bekannte Grenzen (Conduit)
+
+- Der `SyncService` (`syncService().finish()`) braucht serverseitiges
+  Sliding Sync; Conduit meldet `VersionIsMissing`. Der E2E-Test treibt Sync
+  und Send-Queue-Flush daher ueber `syncOnce` (`syncOnceV2`) beidseitig;
+  produktiv bleibt `startLiveSync` verdrahtet.
+- Emulator-Netz defekt (leere Routentabelle, `10.0.2.2` unerreichbar:
+  `Failed to connect`). Der Lauf nutzt `adb reverse tcp:6167/tcp:8090`
+  nach `127.0.0.1` (nach Emulator-Neustart neu setzen, Schritt [3/6]).
+- Aeltere Harness-Aussage („Gateway-Probe gruen") war falsch gelesen:
+  `probeGateway()` loggte nur `reachable=none`; der Cleartext-Ban
+  (targetSdk 36, API 35 — Loopback-Exempt erst ab API 37) blockte HTTP,
+  bis die `emulatorDebug`-Netzwerkconfig kam.
