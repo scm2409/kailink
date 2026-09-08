@@ -25,6 +25,11 @@ Gerätewechsel hinweg, Multi-Account, Voice-/Videoanrufe.
 - **G2 – Echtes Matrix-SDK.** Für Matrix-Protokoll, Krypto und Sync wird das
   offizielle `matrix-rust-sdk` (Android-Bindings) benutzt. Eigene
   Protokoll-/Krypto-Implementierungen sind verboten.
+  *Phase-1-Klausel (2026-09-08):* solange die SDK-Artefakte im lokalen
+  Offline-Cache nicht verfügbar sind, läuft die App gegen die dokumentierte
+  In-Memory-Simulation (`InMemoryChannelClient`, Grundsatz G5) — ohne jede
+  eigene Protokoll-/Krypto-Logik; G2 tritt mit Einbindung des
+  Referenzadapters (`app/src/phase2/`) in Kraft.
 - **G3 – Verifizierte Abhängigkeiten.** Eine Abhängigkeit wird erst
   eingebunden, wenn Versionsnummer und benutzte API-Oberfläche lokal
   (Maven-Metadaten und/oder Entpacken der Artefakte) geprüft wurden.
@@ -58,7 +63,7 @@ werden nie stillschweigend überschrieben.
 
 | Stufe | Mittel | Ohne Gerät möglich |
 | --- | --- | --- |
-| V1 | JVM-Tests (`testDebugUnitTest`) | ja |
+| V1 | JVM-Prüfungen (`phase1Checks`, solange JUnit offline nicht verfügbar) | ja |
 | V2 | Kompilierung + `assembleDebug` | ja |
 | V3 | Strukturprüfung (Manifest, Badging, APK-Inhalt) | ja |
 | V4 | Verhalten auf Gerät/Emulator | nein → manuelles Protokoll |

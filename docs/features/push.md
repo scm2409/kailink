@@ -1,42 +1,50 @@
-# Feature: Push über UnifiedPush (ohne Google/FCM)
+# Feature: Push-Abstraktion (ohne Google/FCM)
 
 ## Interaktionsmodell
 
-- Nach Anmeldung versucht KaiLink, einen UnifiedPush-Distributor zu finden
-  (`UnifiedPush.tryPickDistributor`). Ist keiner installiert, zeigt die
-  Raumliste den Zustand „Push: kein Distributor" — die App funktioniert
-  trotzdem (nur ohne Hintergrund-Push).
-- Ist ein Distributor vorhanden, registriert sich KaiLink; der neue Endpoint
-  wird automatisch als Matrix-Pusher am Homeserver gemeldet.
-- Push-Nachrichten des Distributors empfangt `KaiLinkPushReceiver`
-  (MessagingReceiver des Connectors) und stößt einen Sync an.
+- Nach Anmeldung zeigt die Raumliste den Push-Zustand; in Phase 1 läuft die
+  Kette gegen den dokumentierten Simulator:
+  „Push: registriert (UnifiedPush-Simulator)".
+- Ein eingehender Push bedeutet immer: Sync anstoßen — Benachrichtigungen
+  werden (bewusst, beide Phasen) nicht gerendert.
 
 ## Implementierung
 
-- `org.unifiedpush.android:connector:3.3.5` (echte, lokal verifizierte
-  Abhängigkeit — kein Stub).
-- `data/push/UnifiedPushRegistrar` (Android): `tryPickDistributor` →
-  `UnifiedPush.register(context, instance="")`; Zustand als
-  `StateFlow<PushState>`.
-- `data/push/PushController` (JVM-testbar): entkoppelt Empfänger-Callbacks vom
-  `ChannelClient` — `onNewEndpoint(url)` → `client.registerPushEndpoint(url)`
-  (`setPusher` mit `PusherKind.Http(HttpPusherData(url, EVENT_ID_ONLY, null))`),
-  `onMessage()` → `client.syncOnce()`.
-- `KaiLinkPushReceiver` (BroadcastReceiver, `exported=false`) filtert die
-  Connector-Aktionen (`MESSAGE`, `NEW_ENDPOINT`, `REGISTRATION_FAILED`,
-  `UNREGISTERED`, `TEMP_UNAVAILABLE`) und delegiert an den `PushController`.
+- `domain/push/PushState` (`NOT_AVAILABLE`, `READY`, `REGISTERED`,
+  `FAILED`) und `PushRegistrationTrigger` sind die Nahtstellen; `ui/`
+  sieht nur diese Typen.
+- `data/push/PushController` (reines Kotlin, JVM-testbar) ist der
+  Zustandsautomat:
+  - `onNewEndpoint(url)` → `ChannelClient.registerPushEndpoint(url)`,
+    Erfolg → `REGISTERED`, Fehler → `FAILED`,
+  - `onMessage()` → `ChannelClient.syncOnce()`,
+  - `onDistributorAvailable()`/`onNoDistributor()`/`onRegistrationFailed()`/
+    `onUnregistered()` für die Distributor-Lebenszyklen.
+- `data/push/SimulatedPushTrigger` (Phase 1): spielt den UnifiedPush-
+  Distributor lokal — Distributor vorhanden → Endpoint
+  (`https://push.phase1.local/at-d71-kailink/endpoint`) → Registrierung;
+  `simulateIncomingPush()` löst den Sync-Pfad aus. Keine Berechtigungen,
+  keine Google-Dienste, keine Netzwerkverbindung.
+
+## Phase-2-Ausblick
+
+- `org.unifiedpush.android:connector` (Referenzcode unter
+  `app/src/phase2/` vorbereitet): `UnifiedPushRegistrar` als
+  `PushRegistrationTrigger`, `KaiLinkPushReceiver` als BroadcastReceiver
+  für die Connector-Aktionen (`MESSAGE`, `NEW_ENDPOINT`,
+  `REGISTRATION_FAILED`, `UNREGISTERED`, `TEMP_UNAVAILABLE`),
+  Manifest-Einträge wieder aufnehmen.
+- Der `PushController` bleibt unverändert; nur der Trigger und der
+  Empfänger werden getauscht.
 
 ## PoC-Grenzen
 
-- Push-Nutzdaten (verschlüsselte Push-Gateway-Payload) werden **nicht** zur
-  Benachrichtigung entschlüsselt; Push = Aufwecken + Sync. Der Nutzer sieht
-  Benachrichtigungen erst beim Öffnen der App bzw. über den Live-Sync.
-  (Offener Punkt: `NotificationClient`-Verdrahtung, siehe verification.md.)
-- Kein Distributor-Auswahl-Dialog; erster gefundener Distributor wird benutzt
-  (LinkActivity des Connectors regelt die Auswahl, falls nötig).
+- Push-Nutzdaten werden nicht entschlüsselt gerendert; Push = Aufwecken +
+  Sync (offener Punkt: `NotificationClient`-Verdrahtung in Phase 2).
+- Kein Distributor-Auswahl-Dialog; Phase 1 simuliert den Distributor.
 
 ## Verifikation
 
-Stufen V1–V3 siehe [`verification.md`](verification.md) (Abschnitt Push);
-`PushController`-Logik ist JVM-getestet. Geräteprüfung (V4): manuelles
-Protokoll, Testfälle MT-7/MT-8 (Distributor ntfy + Homeserver-Pusher).
+V1: `PushControllerChecks` (4) und `PushChainChecks` (3) — bestanden
+2026-09-08, siehe [`verification.md`](verification.md). V4: manuelles
+Protokoll, Testfall MT-6 (**nicht beobachtet**, kein Gerät).

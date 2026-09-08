@@ -1,6 +1,5 @@
 package at.d71.kailink.ui.rooms
 
-import at.d71.kailink.data.push.PushController
 import at.d71.kailink.domain.ChannelClient
 import at.d71.kailink.domain.ChannelEvent
 import at.d71.kailink.domain.model.Room
@@ -24,13 +23,13 @@ data class RoomListUiState(
 
 /**
  * Raumliste; aktualisiert sich aus [ChannelEvent.RoomsUpdated] und nach
- * `syncOnce` (docs/features/raumliste-chronik.md). Reine Kotlin-Klasse ohne
- * Android-/Lifecycle-Abhängigkeit; der CoroutineScope ist injizierbar,
- * damit JVM-Prüfungen deterministisch laufen.
+ * `syncOnce` (docs/features/raumliste-chronik.md). Reine Kotlin-Klasse;
+ * der Push-Zustand wird als StateFlow injiziert, damit `ui/` keine
+ * data-Typen kennt.
  */
 class RoomListViewModel(
     private val channelClient: ChannelClient,
-    private val pushController: PushController,
+    pushState: StateFlow<PushState>,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
 
@@ -38,7 +37,7 @@ class RoomListViewModel(
     val ui: StateFlow<RoomListUiState> = _ui.asStateFlow()
 
     /** Push-Zustand der Push-Registrierung (Anzeige in der Liste). */
-    val pushState: StateFlow<PushState> = pushController.state
+    val pushState: StateFlow<PushState> = pushState
 
     init {
         _ui.update { it.copy(userId = channelClient.activeSession?.userId) }

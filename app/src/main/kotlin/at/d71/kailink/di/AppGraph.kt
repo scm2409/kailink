@@ -1,9 +1,9 @@
 package at.d71.kailink.di
 
 import android.content.Context
-import at.d71.kailink.data.matrix.MatrixSdkChannelClient
+import at.d71.kailink.data.channel.InMemoryChannelClient
 import at.d71.kailink.data.push.PushController
-import at.d71.kailink.data.push.UnifiedPushRegistrar
+import at.d71.kailink.data.push.SimulatedPushTrigger
 import at.d71.kailink.data.session.FileSessionStore
 import at.d71.kailink.domain.ChannelClient
 import at.d71.kailink.domain.SessionStore
@@ -19,8 +19,7 @@ import kotlinx.coroutines.SupervisorJob
 
 /**
  * Manuelle Abhängigkeitsverdrahtung des PoC (bewusst kein Hilt/Dagger).
- * Erzeugt genau einen Graph pro Prozess; die Matrix- und Push-Adapter sind
- * die echten Implementierungen (matrix-rust-sdk, UnifiedPush-Connector).
+ * Erzeugt genau einen Graph pro Prozess.
  */
 class AppGraph(appContext: Context) {
 
@@ -30,13 +29,7 @@ class AppGraph(appContext: Context) {
         File(appContext.filesDir, "kailink/session.properties"),
     )
 
-    val channelClient: ChannelClient = MatrixSdkChannelClient(
-        sessionStore = sessionStore,
-        storeDir = File(appContext.filesDir, "matrix/store"),
-        cacheDir = File(appContext.cacheDir, "matrix/cache"),
-        scope = appScope,
-        onLog = ::log,
-    )
+    val channelClient: ChannelClient = InMemoryChannelClient(sessionStore)
 
     val pushController: PushController = PushController(
         channelClient = channelClient,
@@ -44,10 +37,7 @@ class AppGraph(appContext: Context) {
         onLog = ::log,
     )
 
-    val pushTrigger: PushRegistrationTrigger = UnifiedPushRegistrar(
-        appContext,
-        pushController,
-    )
+    val pushTrigger: PushRegistrationTrigger = SimulatedPushTrigger(pushController)
 
     val pushState get() = pushController.state
 

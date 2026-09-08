@@ -1,29 +1,36 @@
-# Feature: Nachrichten senden/empfangen & E2EE
+# Feature: Nachrichten senden/empfangen & E2EE-Ausblick
 
-## Interaktionsmodell
+## Interaktionsmodell (Phase 1, Simulation)
 
-- Senden: Text in das Sendefeld, Enter/„Senden" → Nachricht erscheint als
-  ausgehende Nachricht in der Chronik.
-- Empfangen: eingehende Nachrichten erscheinen live (Vordergrund-Sync) bzw.
-  nach Push-ausgelöstem Sync.
-- Verschlüsselte Räume sind in der Raumliste markiert. Nachrichten, die nicht
-  entschlüsselt werden konnten, erscheinen als „(verschlüsselt — kann nicht
-  entschlüsselt werden)" (`DeliveryState.UNDECRYPTABLE`).
+- Senden: Text in das Sendefeld, „Senden" → Nachricht erscheint als
+  ausgehende Sprechblase in der Chronik; Sendefeld wird geleert.
+- Empfangen: Nachrichten der Demoräume erscheinen beim Öffnen; neue
+  „Ereignisse" liefert die In-Memory-Simulation über `TimelineUpdated`.
+- **Phase 1 hat keine Verschlüsselung**: das 🔒-Badge der Demoräume ist
+  reine Anzeige (`isEncrypted`-Flag), Inhalte liegen im Klartext im
+  Speicher.
 
-## Implementierung
+## Implementierung (Phase 1)
 
-- Senden: `Timeline.createMessageContent(MessageType.Text(TextMessageContent(body, null)))`
-  → `Timeline.send(content)`. Die Send-Queue und Verschlüsselung des
-  Rust-SDK übernehmen Zustellung, Wiederholung und Megolm-Verschlüsselung.
-- Empfangen: Chronik-Listener (siehe raumliste-chronik.md). `MsgLikeKind.UnableToDecrypt`
-  wird auf `UNDECRYPTABLE` abgebildet, sonst auf Text-Inhalt (`MessageContent.getMsgType()`
-  als `MessageType.Text` → `TextMessageContent.getBody()`).
-- E2EE-Gerüst: SQLite-Krypto-Store (Schlüsselpersistenz), automatische
-  Geräte-/Schlüsselverwaltung des Rust-SDK. Eine explizite
-  Verifizierungs-UI (SAS/Emoji-Vergleich) ist im PoC **nicht** gebaut;
-  Vertrauen läuft über das Standardverhalten des SDK
-  (`autoEnableCrossSigning(true)` …). Das Protokoll (MT-4) prüft, dass
-  verschlüsselter Verkehr zwischen zwei Geräten/Konten funktioniert.
+- Senden: `ChannelClient.sendMessage(roomId, body)` → Ablage im
+  In-Memory-Speicher (Richtung `OUTGOING`, Zustand `SENT`) →
+  `TimelineUpdated`-Ereignis → Chronik rendert.
+- `DeliveryState.UNDECRYPTABLE` existiert im Domänenmodell bereits und wird
+  von der Chronik rot dargestellt — die Simulation erzeugt ihn nicht;
+  Phase 2 liefert echte `UnableToDecrypt`-Fälle.
+
+## E2EE-Ausblick (Phase 2)
+
+- Echtes `matrix-rust-sdk` (Android-Bindings): Megolm/Olm, Send-Queue,
+  automatische Schlüsselverwaltung, SQLite-Krypto-Store
+  (`context.filesDir/matrix/store`) → Schlüssel überleben Neustarts.
+- Übersetzung: SDK-`TimelineDiff` → `TimelinePatch` →
+  `TimelineReducer.apply`; `MsgLikeKind.UnableToDecrypt` →
+  `DeliveryState.UNDECRYPTABLE`.
+- Eine explizite Verifizierungs-UI (SAS/Emoji-Vergleich) ist **nicht**
+  geplant; Vertrauen läuft über das Standardverhalten des SDK
+  (Cross-Signing). Das manuelle Protokoll von Phase 2 prüft verschlüsselten
+  Verkehr zwischen zwei Geräten/Konten.
 
 ## PoC-Grenzen
 
@@ -34,5 +41,7 @@
 
 ## Verifikation
 
-Stufen V1–V3 siehe [`verification.md`](verification.md) (Abschnitt
-Nachrichten/E2EE). Geräteprüfung (V4): manuelles Protokoll, Testfälle MT-4/MT-5/MT-6.
+V1: `TimelineViewModelChecks` (5, inkl. Raum-Filter und Fehlerpfade) und
+`InMemoryChannelClientChecks` (6) — bestanden 2026-09-08, siehe
+[`verification.md`](verification.md). V4: manuelles Protokoll, Testfälle
+MT-3/MT-4 (**nicht beobachtet**, kein Gerät). E2EE selbst: Phase 2.

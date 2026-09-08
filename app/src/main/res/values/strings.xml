@@ -1,4 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">KaiLink</string>
+    <string name="login_title">KaiLink</string>
+    <string name="login_subtitle">Anmeldung beim Matrix-Homeserver</string>
+    <string name="login_homeserver_hint">Homeserver-URL (z. B. https://matrix.org)</string>
+    <string name="login_username_hint">Benutzername</string>
+    <string name="login_password_hint">Passwort</string>
+    <string name="login_button">Anmelden</string>
+    <string name="login_button_busy">Bitte warten …</string>
+    <string name="rooms_title">KaiLink — Räume</string>
+    <string name="rooms_refresh">Aktualisieren</string>
+    <string name="rooms_logout">Abmelden</string>
+    <string name="rooms_empty">Keine Räume gefunden.</string>
+    <string name="rooms_logged_in_as">Angemeldet: %1$s</string>
+    <string name="rooms_logged_in">Angemeldet</string>
+    <string name="push_registered">Push: registriert (UnifiedPush-Simulator)</string>
+    <string name="push_ready">Push: Registrierung läuft …</string>
+    <string name="push_not_available">Push: kein Distributor gefunden</string>
+    <string name="push_failed">Push: Registrierung fehlgeschlagen</string>
+    <string name="timeline_back">Zurück</string>
+    <string name="timeline_send">Senden</string>
+    <string name="timeline_draft_hint">Nachricht …</string>
+    <string name="phase1_note">Phase 1: Kanalsimulation; es werden keine Netzwerkverbindungen aufgebaut.</string>
 </resources>

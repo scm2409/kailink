@@ -1,96 +1,101 @@
 # Manuelles Testprotokoll (V4, Gerät/Emulator)
 
-**App:** KaiLink PoC, Debug-Build `kailink-poc-v0.1.0-debug.apk`
+**App:** KaiLink Phase 1, Debug-Build `app-debug.apk`
+(`applicationId at.d71.kailink`, versionName `0.1.0-phase1`, minSdk 28).
+
 **Vorbereitung (einmalig):**
 
-1. Zwei Matrix-Konten auf demselben Homeserver (im Folgenden **A** und **B**).
-2. Gerät/Emulator mit installierter App; **kein** Google-Konto nötig.
-3. Für Push: UnifiedPush-Distributor installieren (empfohlen: ntfy aus F-Droid).
-4. Protokollführer notiert Datum, Geräte-ID (Einstellungen → Über) und
-   beobachtete Abweichungen. **Jeder Testfall braucht Ergebnis
-   „bestanden/fehlgeschlagen" + Beobachtung.**
+1. Gerät/Emulator mit Android 9+ (API 28+); **kein** Google-Konto nötig.
+2. Installation: `adb install app/build/outputs/apk/debug/app-debug.apk`.
+3. **Phase-1-Besonderheit:** der Kanaldienst ist eine In-Memory-Simulation.
+   Anmeldedaten werden **nicht** gegen einen echten Homeserver geprüft;
+   gültig ist jede nicht-leere Kombination. Es werden keine
+   Netzwerkverbindungen aufgebaut.
+4. Protokollführer notiert Datum, Geräte-ID und beobachtete Abweichungen.
+   **Jeder Testfall braucht Ergebnis „bestanden/fehlgeschlagen" +
+   Beobachtung.**
 
-> Alles, was hier nur „beschrieben" ist, gilt in `verification.md` als
+> Alles, was hier nur „beschrieben" ist, gilt in
+> [`features/verification.md`](features/verification.md) als
 > **nicht beobachtet**, bis das Protokoll mit Ergebnissen ausgefüllt wurde.
 
 ---
 
-## MT-1 Matrix-Login (Konto A)
+## MT-1 Anmeldung (Kanalsimulation)
 
-1. KaiLink starten → Anmeldeoberfläche erscheint.
-2. Homeserver-URL `https://<hs>`, Konto A, Passwort eingeben → „Anmelden".
-3. **Erwartung:** Fehlermeldungen bei leeren Feldern (deutsch); bei korrekten
-   Daten Wechsel in die Raumliste; Raumliste zeigt A' Räume; kein Absturz.
-4. **Abbruchfall:** absichtlich falsches Passwort → deutsche Fehlermeldung im
-   Formular, App stürzt nicht ab.
+1. KaiLink starten → Anmeldeoberfläche erscheint (Titel „KaiLink").
+2. Alle Felder leer lassen → „Anmelden".
+3. **Erwartung:** deutsche Fehlermeldung „Bitte alle Felder ausfüllen.",
+   kein Login-Versuch, kein Absturz.
+4. Homeserver-URL `https://phase1.local`, Benutzername `alice`, Passwort
+   `geheim` → „Anmelden".
+5. **Erwartung:** Button zeigt „Bitte warten …" mit Fortschrittsanzeige,
+   danach Wechsel in die Raumliste; Kopfzeile zeigt „Angemeldet:
+   @alice:phase1.local"; zwei Demoräume erscheinen („Projektkanal Phase 1"
+   mit 🔒, „Notizen" ohne Badge).
 
 ## MT-2 Sitzungswiederherstellung
 
 1. MT-1 erfolgreich; App über System-Zurück beenden; Gerät sperren/entlassen.
 2. KaiLink erneut starten.
-3. **Erwartung:** Kein erneutes Passwortabfragen — automatische
-   Wiederherstellung springt direkt in die Raumliste; die Raumliste zeigt
-   denselben Kontonamen (Raumliste/Zähler plausibel).
-4. **E2EE-Voraussetzung prüfen:** nach Wiederherstellung später MT-4 erneut
-   ausführen (sicherstellt, dass der SQLite-Krypto-Store überlebt hat).
+3. **Erwartung:** keine erneute Passwortabfrage — die Anmeldeoberfläche zeigt
+   „Sitzung wird wiederhergestellt …" und springt direkt in die Raumliste;
+   dieselbe Nutzerkennung wie in MT-1.
+4. **Abbruchfall (optional):** `session.properties` vor dem Start beschädigen
+   (z. B. leere Datei unter
+   `/data/data/at.d71.kailink/files/kailink/`, nur mit Debug-Build
+   `run-as` prüfbar) → Wiederherstellung schlägt fehl, deutsche
+   Fehlermeldung, Sitzungsdatei wird gelöscht, Anmeldung bleibt nutzbar.
 
 ## MT-3 Raumliste & Chronik öffnen
 
-1. In der Raumliste einen (vorzugsweise verschlüsselten) Raum antippen.
-2. **Erwartung:** Chronik öffnet; vorhandene Nachrichten erscheinen
-   (entweder Inhalt oder „verschlüsselt — kann nicht entschlüsselt werden");
-   verschlüsselte Räume tragen das „🔒"-Badge in der Liste.
-3. Zurück zur Raumliste; erneut in denselben Raum: Chronik-Konsistenz.
+1. In der Raumliste „Projektkanal Phase 1" antippen.
+2. **Erwartung:** Chronik öffnet; zwei Begrüßungsnachrichten erscheinen;
+   Kopfbereich zeigt den Raumnamen und eine „Zurück"-Schaltfläche.
+3. Zurück zur Raumliste; erneut in denselben Raum: Chronik bleibt
+   konsistent (Nachrichten doppelt so oft, keine Duplikate im Inhalt).
 
-## MT-4 E2EE-Verifizierung (Geräte-/Schlüssel-Vertrauen)
+## MT-4 Senden
 
-> Der PoC baut **keine** eigene SAS-Verifizierungs-UI. Das Vertrauen läuft
-> über Cross-Signing/Standardverhalten des Rust-SDK. Dieser Testfall prüft
-> das beobachtbare Endergebnis.
+1. Im geöffneten Raum eine Textnachricht eingeben und „Senden" tippen.
+2. **Erwartung:** Nachricht erscheint sofort als ausgehende Sprechblase
+   (grüner Hintergrund), das Sendefeld wird geleert.
+3. **Abbruchfall:** nur Leerzeichen eingeben → „Senden" hat keine Wirkung
+   (kein Leerzeichen-Leereintrag in der Chronik).
+4. Raumliste öffnen: die gesendete Nachricht erscheint als Vorschau unter
+   dem Raumnamen.
 
-1. Konto B (anderes Gerät oder Webclient) antwortet in einem verschlüsselten
-   Raum an Konto A.
-2. **Erwartung A:** B' Nachrichten erscheinen lesbar (SDK hat Schlüssel
-   verteilt/verwendet); **keine** `UNDECRYPTABLE`-Einträge für B' neue
-   Nachrichten.
-3. **Erwartung B:** B sieht A' Antwort ebenfalls lesbar (kein
-   Entschlüsselungsfehler beim Gegenüber).
-4. **Beobachtung dokumentieren:** Datum/Uhrzeit, Raum-ID, ob
-   „verschlüsselt — kann nicht entschlüsselt werden" auftauchte.
+## MT-5 Live-Sync-Ereignis
 
-## MT-5 Verschlüsselt senden
+1. In der Chronik „Aktualisieren" ist nur in der Raumliste sichtbar; dort
+   „Aktualisieren" tippen.
+2. **Erwartung:** keine Fehlermeldung; Raumliste bleibt stabil (Sync läuft
+   gegen die Simulation, Start des Live-Sync ändert die Liste nicht
+   unerwartet).
 
-1. In verschlüsseltem Raum aus MT-3/MT-4 eine Textnachricht senden.
-2. **Erwartung A:** Nachricht erscheint sofort als ausgehende Nachricht.
-3. **Erwartung B:** Auf B-Gerät/Webclient erscheint dieselbe Nachricht
-   (lesbar, E2EE-Raum). Am Webclient optional prüfen: Ereignis ist vom Typ
-   `m.room.encrypted` (Server sieht Klartext nicht).
-4. **Abbruchfall:** Flugmodus → Senden → Fehlerzustand sichtbar; App stürzt
-   nicht ab; nach Netzrückkehr erneut senden (Send-Queue des SDK).
+## MT-6 Push-Kette (Simulator)
 
-## MT-6 Verschlüsselt empfangen (Live-Sync)
+1. Nach Anmeldung in der Raumliste die Push-Zeile beobachten.
+2. **Erwartung:** „Push: registriert (UnifiedPush-Simulator)" — der
+   simulierte Distributor liefert Endpoint und Registrierung
+   (`PushState.REGISTERED`); kein Dialog, kein Google-Dienst.
+3. Ohne Anmeldung (frische Installation, vor MT-1): nach Registrierungs-
+   versuch wäre der Zustand „kein Distributor"/„fehlgeschlagen" möglich —
+   App bleibt in jedem Fall nutzbar.
 
-1. App im Vordergrund im Raum; B sendet Nachricht.
-2. **Erwartung:** Nachricht erscheint innerhalb weniger Sekunden (Live-Sync).
-3. Chronik verlassen, B sendet erneut, Chronik wieder öffnen → Nachricht
-   nachgeholt (`syncOnce` beim Öffnen).
+## MT-7 Rotation/Neustart der Activity
 
-## MT-7 UnifiedPush-Registrierung
+1. Gerät drehen (Activity-Zerstörung erzwingen).
+2. **Erwartung:** App stürzt nicht ab; die jeweils sichtbare Oberfläche
+   erscheint erneut; in Phase 1 ist der UI-Zustand der Chronik nach dem
+   Neuaufbau erneut geladen (Simulation startet neu, Demoräume vorhanden).
 
-1. ntfy (Distributor) installieren; KaiLink starten, MT-1 ausführen.
-2. **Erwartung:** Raumliste zeigt Push-Zustand; nach Zustimmung im
-   Auswahl-Dialog → „Push registriert".
-3. Andernfalls (kein Distributor): Zustand „kein Distributor" — App bleibt
-   nutzbar.
+## MT-8 Negative Prüfung: keine Netzwerkzugriffe
 
-## MT-8 Push-Empfang → Sync
-
-1. KaiLink in Hintergrund; B sendet Nachricht in denselben Raum.
-2. **Erwartung (PoC-Grenze bewusst):** Distributor stellt Push zu
-   (Benachrichtigungs-/Verbindungsindikator des Distributors); beim nächsten
-   Öffnen von KaiLink ist die Nachricht da (Push stößt Sync an).
-3. **Abbruchfall:** Distributor deaktivieren → App bleibt über manuelles
-   Öffnen nutzbar.
+1. Flugmodus aktivieren, App komplett neu starten, MT-1 bis MT-4
+   wiederholen.
+2. **Erwartung:** identisches Verhalten wie online (Phase 1 baut bewusst
+   keine Verbindungen auf); keine Abstürze.
 
 ---
 

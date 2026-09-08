@@ -20,11 +20,13 @@ fun roomListViewModelChecks() {
             PushController(client, viewModelScope()).state,
             viewModelScope(),
         )
+        val syncBefore = client.syncOnceCalls
+        val liveSyncBefore = client.startLiveSyncCalls
 
         viewModel.refresh()
 
-        expectTrue(client.syncOnceCalls >= 1, "mindestens ein syncOnce")
-        expectEquals(1, client.startLiveSyncCalls, "startLiveSync")
+        expectTrue(client.syncOnceCalls > syncBefore, "syncOnce erneut ausgelöst")
+        expectEquals(liveSyncBefore + 1, client.startLiveSyncCalls, "startLiveSync")
         expectEquals(
             listOf(TEST_ROOM.id),
             viewModel.ui.value.rooms.map { it.id },

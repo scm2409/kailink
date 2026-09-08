@@ -45,6 +45,10 @@ import org.matrix.rustcomponents.sdk.TimelineListener
 /**
  * Adapter auf das echte matrix-rust-sdk (org.matrix.rustcomponents:sdk-android).
  *
+ * [PHASE 2 — wird in Phase 1 NICHT kompiliert.] Diese Datei liegt außerhalb
+ * des kompilierten Quellbaums (app/src/phase2) als Referenzimplementierung;
+ * die SDK-Artefakte sind im Offline-Cache dieser Umgebung nicht verfügbar.
+ *
  * Übersetzt SDK-Aufrufe/Listener in die Domänennahtstelle [ChannelClient]
  * bzw. in [ChannelEvent]/[TimelinePatch]. Alle von der SDK-Oberfläche
  * abweichenden Verhaltensweisen sind in docs/architecture.md dokumentiert.
