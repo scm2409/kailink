@@ -14,3 +14,9 @@
   Emulatornachweis läuft per separater APK-Installation und
   `am instrument`, weil die x86_64-Emulatorvariante nicht automatisch eine
   eigene `connectedEmulatorDebugAndroidTest`-Gradle-Aufgabe erzeugt.
+
+- Das Emulator-Gate-Skript beendet den Lauf absichtlich mit Exit-Code 3, wenn
+  nach den grünen HTTP-, Build- und Instrumentierungs-Smokes die vollständige
+  Matrix-/E2EE-/UnifiedPush-Kette verlangt wird. Ohne echten Test-
+  Konfigurationskanal, kontrollierten E2EE-Schlüsselaustausch und
+  Distributor-Nachweis wäre ein grüner Exit-Code irreführend.

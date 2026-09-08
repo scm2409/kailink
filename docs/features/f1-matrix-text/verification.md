@@ -38,6 +38,22 @@ Android-Instrumentierung prüft bislang nur Paketmetadaten und das Login-Prefill
 der vollständige Matrix-/E2EE-/Pusher-Lauf gegen den lokalen Homeserver ist
 weiterhin offen und nicht als bestanden behauptet.
 
+## Emulator-Gate-Skript
+
+`./scripts/emulator-e2e.sh` führt den lokalen Matrix-/ntfy-HTTP-Smoke, die
+JVM-Prüfungen, beide APK-Builds und den direkten AndroidX-
+Instrumentierungs-Smoke auf `kailink-atd35` aus. Danach beendet es sich mit
+Exit-Code 3 und weist ausdrücklich darauf hin, dass die vollständige
+Matrix-/E2EE-/UnifiedPush-Kette noch nicht automatisiert ist. Dieser
+Fehlerstatus ist beabsichtigt und verhindert einen falschen E2E-Nachweis.
+
+Derzeit nicht implementiert sind ein test-only Konfigurationskanal für zwei
+Wegwerfkonten und Raum-IDs, ein kontrollierter E2EE-Schlüsselaustausch für
+den Instrumentierungslauf sowie die automatisierte Einrichtung eines
+UnifiedPush-Distributors (ntfy-App). Ein direkter Broadcast an den als nicht
+exportiert markierten Receiver wäre kein Nachweis der Distributor-Stufe und
+wird deshalb nicht als Push-Erfolg gewertet.
+
 ## Manuell auf dem Gerät
 
 Martin prüft auf GrapheneOS Login gegen `https://matrix.org`, Restore nach
