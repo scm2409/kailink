@@ -97,9 +97,12 @@ class E2eHarness(
     }
 
     companion object {
+        // 127.0.0.1 zuerst: via "adb reverse" auf den Devbox-Host getunnelt
+        // (Emulator-Loopback erreicht andernfalls nur den Emulator selbst).
         val GATEWAY_CANDIDATES = listOf(
-            "http://192.168.42.20:8090",
+            "http://127.0.0.1:8090",
             "http://10.0.2.2:8090",
+            "http://192.168.42.20:8090",
         )
 
         private const val TAG = "KaiLinkE2E"
