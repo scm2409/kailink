@@ -133,17 +133,20 @@ class MatrixSdkChannelClient(
     private suspend fun buildClient(homeserverUrl: String): Client {
         storeDir.mkdirs()
         cacheDir.mkdirs()
-        val builder = ClientBuilder()
-        builder.homeserverUrl(homeserverUrl)
-        builder.sqliteStore(
+        // UniFFI-Builder sind immutable (Rust: self: Arc<Self> -> Arc<Self>):
+        // jeder Setter gibt einen NEUEN Builder zurueck; der Rueckgabewert
+        // muss verkettet werden, sonst geht die Einstellung verloren.
+        var builder = ClientBuilder()
+        builder = builder.homeserverUrl(homeserverUrl)
+        builder = builder.sqliteStore(
             SqliteStoreBuilder(
                 storeDir.resolve("state.sqlite").absolutePath,
                 cacheDir.absolutePath,
             ),
         )
         if (e2eeTestConfig?.allowUntrustedDevices == true) {
-            builder.roomKeyRecipientStrategy(CollectStrategy.ALL_DEVICES)
-            builder.decryptionSettings(DecryptionSettings(TrustRequirement.UNTRUSTED))
+            builder = builder.roomKeyRecipientStrategy(CollectStrategy.ALL_DEVICES)
+            builder = builder.decryptionSettings(DecryptionSettings(TrustRequirement.UNTRUSTED))
         }
         return try {
             builder.build()
