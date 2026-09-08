@@ -21,14 +21,20 @@ class E2eHarness(
     private val arguments: Bundle = InstrumentationRegistry.getArguments(),
 ) {
 
-    fun credentials(): E2eCredentials {
-        val homeserverUrl = arguments.getString(ARG_HOMESERVER)?.trim().orEmpty()
-        val username = arguments.getString(ARG_USERNAME)?.trim().orEmpty()
-        val password = arguments.getString(ARG_PASSWORD).orEmpty()
+    fun aliceCredentials(): E2eCredentials = credentials("e2e.alice.username", "e2e.alice.password")
+
+    fun bobCredentials(): E2eCredentials = credentials("e2e.bob.username", "e2e.bob.password")
+
+    fun requireHomeserver(): String = arguments.getString(ARG_HOMESERVER)?.trim()?.takeIf { it.isNotEmpty() }
+        ?: throw AssumptionViolatedException("e2e.homeserver fehlt")
+
+    private fun credentials(userKey: String, passwordKey: String): E2eCredentials {
+        val homeserverUrl = requireHomeserver()
+        val username = arguments.getString(userKey)?.trim().orEmpty()
+        val password = arguments.getString(passwordKey).orEmpty()
         val missing = mutableListOf<String>()
-        if (homeserverUrl.isEmpty()) missing.add(ARG_HOMESERVER)
-        if (username.isEmpty()) missing.add(ARG_USERNAME)
-        if (password.isEmpty()) missing.add(ARG_PASSWORD)
+        if (username.isEmpty()) missing.add(userKey)
+        if (password.isEmpty()) missing.add(passwordKey)
         if (missing.isNotEmpty()) {
             throw AssumptionViolatedException(
                 "E2E-Zugangsdaten fehlen; Instrumentierungs-Argumente erforderlich: $missing",
