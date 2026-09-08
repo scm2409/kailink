@@ -16,14 +16,28 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.2.0-phase1"
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
     }
 
     buildTypes {
+        debug {
+            // Martin's Telefon: arm64-v8a (Policy unverändert).
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+            }
+        }
         release {
             isMinifyEnabled = false
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+            }
+        }
+        create("emulatorDebug") {
+            initWith(getByName("debug"))
+            matchingFallbacks += listOf("debug")
+            ndk {
+                abiFilters.clear()
+                abiFilters += listOf("x86_64")
+            }
         }
     }
 
