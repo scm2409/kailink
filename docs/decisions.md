@@ -7,7 +7,7 @@
   `https://ntfy.sh/_matrix/push/v1/notify`.
 - Sessions are protected in production with AES-256-GCM and a non-exportable
   Android Keystore key; JVM tests use the file test double.
-- The Phase-1 version is `0.2.1-phase1`.
+- The Phase-1 version is `0.2.4-phase1` (versionCode 2).
 
 - For Android instrumentation tests, AndroidX Test Runner `1.6.2`,
   AndroidX Test JUnit `1.2.1`, and Test Core `1.6.1` are used. The first
@@ -64,8 +64,32 @@
   network and only honors server-stapled OCSP responses. All other validation
   (trust anchors, chain, signatures, validity, EKU, hostname in Rust) is
   preserved; this matches the upstream post-#6323 validation strength.
-  `MatrixSdkChannelClient` additionally maps TLS/certificate failures to a
-  readable user message ("Secure connection to the homeserver failed
-  (certificate error). Check the server address.") while raw reqwest/hyper
-  details go only to the log — extending the error mapping from `4bdba22`
-  without replacing it.
+   `MatrixSdkChannelClient` additionally maps TLS/certificate failures to a
+   readable user message ("Secure connection to the homeserver failed
+   (certificate error). Check the server address.") while raw reqwest/hyper
+   details go only to the log — extending the error mapping from `4bdba22`
+   without replacing it.
+
+- Debug log upload (0.2.4-phase1): the file goes through the pinned SDK's
+  attachment path — `Timeline.sendFile(UploadParameters, FileInfo)` followed
+  by `SendAttachmentJoinHandle.join()` (verified against the vendored
+  `sdk-android:26.09.08` bindings). `UploadSource.Data` carries the ~1000-line
+  buffer in memory as a `text/plain` `.txt`; the send queue encrypts it for
+  E2EE rooms like any message. If the target room is not open, a temporary
+  `Room.timeline()` is created and closed after `join()`.
+- KaiL room resolution is deliberately a heuristic, not configuration: the
+  upload target is the first room whose display name contains the standalone
+  word `kail` (case-insensitive word-boundary match). The boundary is
+  essential: room names like `kailink-e2e-a-…` (E2E gate) must not match —
+  observed during the 0.2.4-phase1 runtime smoke test. Without a matching
+  room the action surfaces a readable error ("No KaiL room found …"). No
+  server-side search, no room picker (PoC).
+- The in-app debug log (`DebugLog`, `data/log/`) is a synchronized ring
+  buffer of ~1000 timestamped lines. `AppGraph.log` is the single app-log
+  seam: everything that reaches `Log.d("KaiLink", …)` also lands in the
+  buffer. It must never receive credentials or tokens (G7).
+- The version footer renders `BuildConfig.VERSION_NAME` (build feature
+  `buildConfig` is now explicitly enabled). All screens are inflated
+  simultaneously inside `activity_main`, so per-screen footer views use
+  distinct IDs (`text_version_login` / `text_version_rooms` /
+  `text_version_timeline`).

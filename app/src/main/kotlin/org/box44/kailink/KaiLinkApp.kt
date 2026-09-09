@@ -2,6 +2,7 @@ package org.box44.kailink
 
 import android.app.Application
 import android.util.Log
+import org.box44.kailink.data.log.DebugLog
 import org.box44.kailink.data.push.PushNotifier
 import org.box44.kailink.di.AppGraph
 import org.matrix.rustcomponents.sdk.LogLevel
@@ -33,6 +34,7 @@ class KaiLinkApp : Application() {
                 useLightweightTokioRuntime = false,
             )
         } catch (t: Throwable) {
+            DebugLog.append("matrix-rust-sdk platform init failed: $t")
             Log.e(TAG, "matrix-rust-sdk platform init failed", t)
         }
         graph = AppGraph(this)

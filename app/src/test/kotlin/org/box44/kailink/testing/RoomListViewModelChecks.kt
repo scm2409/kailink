@@ -1,6 +1,7 @@
 package org.box44.kailink.testing
 
 import org.box44.kailink.data.push.PushController
+import org.box44.kailink.domain.ChannelClient
 import org.box44.kailink.domain.ChannelEvent
 import org.box44.kailink.ui.rooms.RoomListViewModel
 import kotlinx.coroutines.CoroutineScope

@@ -70,4 +70,15 @@
             android:layout_marginStart="8dp"
             android:text="@string/timeline_send" />
     </LinearLayout>
+
+    <!-- Version footer: genuinely bottom-positioned below the composer. -->
+    <TextView
+        android:id="@+id/text_version_timeline"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingBottom="6dp"
+        android:paddingTop="2dp"
+        android:textColor="@color/secondary_text"
+        android:textSize="11sp" />
 </LinearLayout>

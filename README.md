@@ -13,13 +13,13 @@ built completely offline**: domain layer with seams, login with
 session restore, room list, timeline with sending, a
 push abstraction with a state machine, and verified JVM verification.
 
-> **Status: Phase 2 (as of 2026-09-08).** The real Matrix adapter
+> **Status: Phase 2 (as of 2026-09-09).** The real Matrix adapter
 > (`MatrixSdkChannelClient`, matrix-rust-sdk 26.09.08) and the
 > [UnifiedPush](https://unifiedpush.org/) integration (`UnifiedPushRegistrar` +
 > `KaiLinkPushReceiver`, connector 3.3.5, without Google/FCM) are compiled
 > and wired in `AppGraph`; `testDebugUnitTest assembleDebug` is green.
-> Runtime against a real homeserver/distributor has not yet been observed
-> (no device in this environment) — see
+> Runtime against a real homeserver/distributor is exercised by the local
+> E2E gate (`scripts/emulator-e2e.sh`) — see
 > [`docs/architecture.md`](docs/architecture.md).
 
 ## Core decisions
@@ -43,13 +43,18 @@ Gradle wrapper 9.1.0, AGP 8.13.2, Kotlin 2.2.21.
 ./gradlew check                             # including lint (abortOnError=false)
 ```
 
-Observed on 2026-09-08: `BUILD SUCCESSFUL`; JUnit report `tests="1"
-failures="0"` (the test runs all 39 check-group checks), check report
-under `app/build/reports/phase1-checks.txt` (39/39 passed), see
+Observed on 2026-09-09: `BUILD SUCCESSFUL`; JUnit report `tests="1"
+failures="0"` (the test runs all 63 check-group checks), check report
+under `app/build/reports/phase1-checks.txt` (63/63 passed), see
 [`docs/features/verification.md`](docs/features/verification.md).
 Result: `app/build/outputs/apk/debug/app-debug.apk`
-(`org.box44.kailink`, versionName `0.2.0-phase1`, minSdk 28, targetSdk 36,
+(`org.box44.kailink`, versionName `0.2.4-phase1`, minSdk 28, targetSdk 36,
 including `libmatrix_sdk_ffi.so` from the matrix-rust-sdk).
+
+Since 0.2.4-phase1 every screen shows the version as a small footer, and the
+room list offers a compact **Send log** action (signed-in only) that uploads
+the in-app debug log (ring buffer, ~1000 lines) as a `.txt` file into the
+KaiL room via the SDK attachment path (`Timeline.sendFile`).
 
 ## Project structure
 
@@ -67,6 +72,7 @@ app/src/main/kotlin/org/box44/kailink/
 │   ├── matrix/      MatrixSdkChannelClient (matrix-rust-sdk, production)
 │   ├── push/        PushController, UnifiedPushRegistrar, KaiLinkPushReceiver,
 │   │                SimulatedPushTrigger (JVM reference)
+│   ├── log/          DebugLog (in-app ring buffer, ~1000 lines)
 │   └── session/     FileSessionStore (properties file, app-private)
 ├── di/              AppGraph (manual wiring: Matrix + UnifiedPush)
 ├── ui/              Framework views + ViewModels (login, room list, timeline)

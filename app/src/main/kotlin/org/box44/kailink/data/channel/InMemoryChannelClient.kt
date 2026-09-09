@@ -150,6 +150,19 @@ class InMemoryChannelClient(
         emitTimeline(roomId)
     }
 
+    override suspend fun sendFile(
+        roomId: String,
+        fileName: String,
+        mimeType: String,
+        content: ByteArray,
+        caption: String?,
+    ) {
+        requireSession()
+        room(roomId)
+        // G5: no bluff — the in-memory reference channel has no media upload.
+        throw ChannelException("Sending files is not supported by the in-memory reference channel.")
+    }
+
     override suspend fun registerPushEndpoint(endpointUrl: String) {
         requireSession()
         registeredEndpoint = endpointUrl

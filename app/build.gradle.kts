@@ -14,8 +14,8 @@ android {
         applicationId = "org.box44.kailink"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.2.3-phase1"
+        versionCode = 2
+        versionName = "0.2.4-phase1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -40,6 +40,12 @@ android {
                 abiFilters += listOf("x86_64")
             }
         }
+    }
+
+    buildFeatures {
+        // BuildConfig.VERSION_NAME is rendered as the version footer on
+        // every screen (see MainActivity + screen layouts).
+        buildConfig = true
     }
 
     compileOptions {

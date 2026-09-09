@@ -1,9 +1,14 @@
 package org.box44.kailink.ui.rooms
 
+import org.box44.kailink.data.log.DebugLog
 import org.box44.kailink.domain.ChannelClient
 import org.box44.kailink.domain.ChannelEvent
+import org.box44.kailink.domain.ChannelException
 import org.box44.kailink.domain.model.Room
 import org.box44.kailink.domain.push.PushState
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,6 +24,7 @@ data class RoomListUiState(
     val refreshing: Boolean = true,
     val error: String? = null,
     val userId: String? = null,
+    val sendingLog: Boolean = false,
 )
 
 /**
@@ -31,6 +37,9 @@ class RoomListViewModel(
     private val channelClient: ChannelClient,
     pushState: StateFlow<PushState>,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    private val logSource: () -> String = { DebugLog.dump() },
+    private val logSink: (String) -> Unit = { DebugLog.append(it) },
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
 
     private val _ui = MutableStateFlow(RoomListUiState())
@@ -82,7 +91,67 @@ class RoomListViewModel(
         }
     }
 
+    /**
+     * Sends the buffered debug log as a `.txt` file into the KaiL room
+     * (the room where the app talks to KaiL). The room is resolved at send
+     * time: the first room whose display name contains the standalone word
+     * [KAIL_ROOM_MARKER] (case-insensitive word-boundary match, so rooms
+     * like "kailink-e2e-…" do not match). Hidden while logged out (the room
+     * list screen is only reachable after login; visibility also follows
+     * [RoomListUiState.userId]).
+     */
+    fun sendDebugLog() {
+        if (_ui.value.sendingLog) return
+        if (channelClient.activeSession == null) {
+            _ui.update { it.copy(error = NOT_LOGGED_IN_MESSAGE) }
+            return
+        }
+        _ui.update { it.copy(sendingLog = true, error = null) }
+        scope.launch {
+            try {
+                val roomId = channelClient.rooms()
+                    .firstOrNull { isKaiLRoom(it.displayName) }
+                    ?.id
+                    ?: throw ChannelException(NO_KAIL_ROOM_MESSAGE)
+                val fileName = "kailink-debug-log-${formatTimestamp(clock())}.txt"
+                channelClient.sendFile(
+                    roomId = roomId,
+                    fileName = fileName,
+                    mimeType = "text/plain",
+                    content = logSource().toByteArray(Charsets.UTF_8),
+                    caption = LOG_CAPTION,
+                )
+                logSink("Debug log sent to $roomId as $fileName")
+                _ui.update { it.copy(sendingLog = false) }
+            } catch (t: Throwable) {
+                _ui.update {
+                    it.copy(sendingLog = false, error = "Sending debug log failed: ${t.message ?: "unknown error"}")
+                }
+            }
+        }
+    }
+
     fun clear() {
         scope.cancel()
+    }
+
+    companion object {
+        /** Marker for the KaiL room (standalone word, case-insensitive — see decisions.md). */
+        const val KAIL_ROOM_MARKER = "kail"
+
+        private val KAIL_ROOM_PATTERN = Regex("""\b${KAIL_ROOM_MARKER}\b""", RegexOption.IGNORE_CASE)
+
+        /** True if the display name identifies the KaiL room. */
+        fun isKaiLRoom(displayName: String): Boolean = KAIL_ROOM_PATTERN.containsMatchIn(displayName)
+
+        internal const val NO_KAIL_ROOM_MESSAGE =
+            "No KaiL room found (the room name must contain \"KaiL\")."
+        internal const val NOT_LOGGED_IN_MESSAGE = "Not signed in."
+        internal const val LOG_CAPTION = "KaiLink debug log"
+
+        private fun formatTimestamp(millis: Long): String {
+            val format = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+            return format.format(Date(millis))
+        }
     }
 }

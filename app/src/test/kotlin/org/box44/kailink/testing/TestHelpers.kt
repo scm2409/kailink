@@ -56,6 +56,7 @@ class FakeChannelClient : ChannelClient {
     var logoutCalls = 0
     val openTimelineCalls = mutableListOf<String>()
     val sendMessageCalls = mutableListOf<Pair<String, String>>()
+    val sendFileCalls = mutableListOf<SentFile>()
     val registerEndpointCalls = mutableListOf<String>()
 
     var loginBehavior: (String, String, String) -> Session = { url, user, _ ->
@@ -113,6 +114,16 @@ class FakeChannelClient : ChannelClient {
         sendMessageBehavior(roomId, body)
     }
 
+    override suspend fun sendFile(
+        roomId: String,
+        fileName: String,
+        mimeType: String,
+        content: ByteArray,
+        caption: String?,
+    ) {
+        sendFileCalls.add(SentFile(roomId, fileName, mimeType, content, caption))
+    }
+
     override suspend fun registerPushEndpoint(endpointUrl: String) {
         registerEndpointCalls.add(endpointUrl)
         registerPushEndpointBehavior(endpointUrl)
@@ -129,6 +140,15 @@ class FakeChannelClient : ChannelClient {
         _events.emit(event)
     }
 }
+
+/** Recorded file send of [FakeChannelClient]. */
+data class SentFile(
+    val roomId: String,
+    val fileName: String,
+    val mimeType: String,
+    val content: ByteArray,
+    val caption: String?,
+)
 
 class FakeSessionStore(initial: Session? = null) : SessionStore {
 

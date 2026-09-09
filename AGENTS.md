@@ -30,6 +30,12 @@
 - Built-in websearch is available when `OPENCODE_ENABLE_EXA=1`.
 - Project-specific operational knowledge belongs in this file; skills are only for project-wide recipes.
 
+## Project conventions (0.2.4-phase1)
+- App logging: route all app log output through `DebugLog` (`data/log/`), normally via the `AppGraph.log` seam. Never append credentials or tokens to the log buffer (G7).
+- Version footer: every screen layout includes a version footer TextView (`text_version_<screen>`); screen IDs must stay distinct because all screens are inflated simultaneously in `activity_main`. Set the text from `BuildConfig.VERSION_NAME` (the `buildConfig` build feature is enabled for this).
+- Send debug log: the upload target is the first room whose display name contains the standalone word `kail` (case-insensitive word-boundary match — `kailink-*` room names must NOT match; see docs/decisions.md). Uploads go through `ChannelClient.sendFile` → `Timeline.sendFile` (pinned SDK attachment path), never through hand-rolled HTTP.
+- Unit checks: new pure-Kotlin behavior gets JVM checks registered in `AllChecks.runAllChecks` (`app/src/test/kotlin/org/box44/kailink/testing/`).
+
 ## Hard Rules
 - Never weaken gate checks or test assertions.
 - Never edit `local.properties`.

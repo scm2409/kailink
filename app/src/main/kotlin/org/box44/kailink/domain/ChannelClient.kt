@@ -63,6 +63,19 @@ interface ChannelClient {
     /** Sends a text message (SDK send queue). */
     suspend fun sendMessage(roomId: String, body: String)
 
+    /**
+     * Sends a file attachment (e.g. the debug log as `.txt`) through the
+     * channel's media upload + send path. The file content is held in
+     * memory ([content]); small files only.
+     */
+    suspend fun sendFile(
+        roomId: String,
+        fileName: String,
+        mimeType: String,
+        content: ByteArray,
+        caption: String?,
+    )
+
     /** Registers a UnifiedPush endpoint as a Matrix pusher. */
     suspend fun registerPushEndpoint(endpointUrl: String)
 

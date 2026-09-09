@@ -23,5 +23,7 @@
     <string name="timeline_back">Back</string>
     <string name="timeline_send">Send</string>
     <string name="timeline_draft_hint">Message …</string>
+    <string name="send_log">Send log</string>
+    <string name="send_log_busy">Sending …</string>
     <string name="phase1_note">KaiLink connects to the specified Matrix homeserver.</string>
 </resources>

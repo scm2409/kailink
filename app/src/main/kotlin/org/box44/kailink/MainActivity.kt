@@ -65,6 +65,7 @@ class MainActivity : Activity() {
     private lateinit var textRoomsError: TextView
     private lateinit var textRoomsEmpty: TextView
     private lateinit var roomListAdapter: RoomListAdapter
+    private lateinit var btnSendLog: Button
 
     private lateinit var textRoomName: TextView
     private lateinit var textTimelineError: TextView
@@ -72,6 +73,12 @@ class MainActivity : Activity() {
     private lateinit var listMessages: ListView
     private lateinit var messageListAdapter: MessageListAdapter
     private var lastMessageCount: Int = 0
+
+    // Version footer (one view per screen; all three screens are inflated
+    // simultaneously, therefore the IDs must be distinct).
+    private lateinit var textVersionLogin: TextView
+    private lateinit var textVersionRooms: TextView
+    private lateinit var textVersionTimeline: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,6 +100,7 @@ class MainActivity : Activity() {
         textPushState = findViewById(R.id.text_push_state)
         textRoomsError = findViewById(R.id.text_rooms_error)
         textRoomsEmpty = findViewById(R.id.text_rooms_empty)
+        btnSendLog = findViewById(R.id.btn_send_log)
         roomListAdapter = RoomListAdapter(this)
         findViewById<ListView>(R.id.list_rooms).apply {
             adapter = roomListAdapter
@@ -108,6 +116,13 @@ class MainActivity : Activity() {
         messageListAdapter = MessageListAdapter(this)
         listMessages.adapter = messageListAdapter
 
+        textVersionLogin = findViewById(R.id.text_version_login)
+        textVersionRooms = findViewById(R.id.text_version_rooms)
+        textVersionTimeline = findViewById(R.id.text_version_timeline)
+        textVersionLogin.text = BuildConfig.VERSION_NAME
+        textVersionRooms.text = BuildConfig.VERSION_NAME
+        textVersionTimeline.text = BuildConfig.VERSION_NAME
+
         loginViewModel = LoginViewModel(graph.channelClient, graph.sessionStore, graph.pushTrigger)
         uiScope.launch { loginViewModel.ui.collect(::renderLogin) }
 
@@ -118,6 +133,7 @@ class MainActivity : Activity() {
 
         findViewById<Button>(R.id.btn_refresh).setOnClickListener { roomListViewModel?.refresh() }
         findViewById<Button>(R.id.btn_logout).setOnClickListener { roomListViewModel?.logout() }
+        btnSendLog.setOnClickListener { roomListViewModel?.sendDebugLog() }
         findViewById<Button>(R.id.btn_back).setOnClickListener { show(KaiLinkScreen.RoomList) }
         inputDraft.addTextChangedListener(simpleWatcher { timelineViewModel?.onDraftChange(it) })
         findViewById<Button>(R.id.btn_send).setOnClickListener { timelineViewModel?.send() }
@@ -205,6 +221,12 @@ class MainActivity : Activity() {
         textRoomsEmpty.visibility =
             if (!state.refreshing && state.rooms.isEmpty()) View.VISIBLE else View.GONE
         roomListAdapter.update(state.rooms)
+        // The debug log action exists only for a signed-in session
+        // (uploads into the KaiL room) and shows progress while busy.
+        btnSendLog.visibility = if (state.userId != null) View.VISIBLE else View.GONE
+        btnSendLog.isEnabled = !state.sendingLog
+        btnSendLog.text =
+            if (state.sendingLog) getString(R.string.send_log_busy) else getString(R.string.send_log)
     }
 
     private fun renderPushState(state: PushState) {

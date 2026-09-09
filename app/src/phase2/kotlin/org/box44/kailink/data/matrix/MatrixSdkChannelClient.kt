@@ -39,6 +39,9 @@ import org.matrix.rustcomponents.sdk.SyncService
 import org.matrix.rustcomponents.sdk.SyncSettingsV2
 import org.matrix.rustcomponents.sdk.TaskHandle
 import org.matrix.rustcomponents.sdk.TextMessageContent
+import org.matrix.rustcomponents.sdk.UploadParameters
+import org.matrix.rustcomponents.sdk.UploadSource
+import org.matrix.rustcomponents.sdk.FileInfo
 import uniffi.matrix_sdk_crypto.CollectStrategy
 import uniffi.matrix_sdk_crypto.DecryptionSettings
 import uniffi.matrix_sdk_crypto.TrustRequirement
@@ -323,6 +326,66 @@ class MatrixSdkChannelClient(
             onLog("Message handed to send queue: $roomId")
         } catch (t: Throwable) {
             throw ChannelException("Send failed: ${t.message ?: "unknown error"}", t)
+        }
+    }
+
+    // ------------------------------------------------------------------ File upload
+
+    override suspend fun sendFile(
+        roomId: String,
+        fileName: String,
+        mimeType: String,
+        content: ByteArray,
+        caption: String?,
+    ) {
+        val c = client ?: throw ChannelException("No active session")
+        val room: SdkRoom = try {
+            c.getRoom(roomId)
+        } catch (t: Throwable) {
+            throw ChannelException("Room not found: $roomId", t)
+        } ?: throw ChannelException("Room not found: $roomId")
+        // Reuse the live timeline subscription when the room is open so the
+        // attachment appears in the subscribed timeline; otherwise a
+        // temporary timeline is created and closed after the send.
+        val temporaryTimeline = timelines[roomId] == null
+        val timeline: Timeline = if (temporaryTimeline) {
+            try {
+                room.timeline()
+            } catch (t: Throwable) {
+                throw ChannelException("Could not open timeline for upload: $roomId", t)
+            }
+        } else {
+            timelines[roomId]!!.timeline
+        }
+        try {
+            val parameters = UploadParameters(
+                source = UploadSource.Data(content, fileName),
+                caption = caption,
+                formattedCaption = null,
+                mentions = null,
+                inReplyTo = null,
+                extraContentJson = null,
+            )
+            val fileInfo = FileInfo(
+                mimetype = mimeType,
+                size = content.size.toULong(),
+                thumbnailInfo = null,
+                thumbnailSource = null,
+            )
+            val handle = timeline.sendFile(parameters, fileInfo)
+            try {
+                handle.join()
+            } finally {
+                runCatching { handle.close() }
+            }
+            onLog("File sent: $fileName (${content.size} bytes) to $roomId")
+        } catch (t: Throwable) {
+            if (t is ChannelException) throw t
+            throw ChannelException("File upload failed: ${t.message ?: "unknown error"}", t)
+        } finally {
+            if (temporaryTimeline) {
+                runCatching { timeline.close() }
+            }
         }
     }
 

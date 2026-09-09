@@ -253,3 +253,46 @@ have run on a device.
    *(Phase 2 note, 2026-09-08: during the follow-up pass the commit
    `c8125fd` (among others package migration, adapter wiring) appeared externally;
    it was not changed or written back.)*
+
+## 7. 0.2.4-phase1 — version footer, debug log upload (2026-09-09)
+
+**V1 (JVM):** `./gradlew testDebugUnitTest assembleDebug --offline` →
+`BUILD SUCCESSFUL`; JUnit `AllChecksTest` runs all 65 checks (was 39), report
+`app/build/reports/phase1-checks.txt`: `Checks: 65, passed: 65, failed: 0`.
+New check groups: `debugLogChecks` (ring buffer order/eviction/header/
+thread-safety), `sendDebugLogChecks` (KaiL room resolution, `.txt` payload,
+logged-out guard, busy-lock, word-boundary negative case for
+`kailink-e2e-…` names).
+
+**V2 (build):** `./gradlew :app:assembleEmulatorDebug :app:assembleDebugAndroidTest --offline`
+(gate-internal) and final `./gradlew testDebugUnitTest assembleDebug --offline`
+→ `BUILD SUCCESSFUL`.
+
+**V3/V4 (emulator runtime smoke, kailink-atd35, Conduit via adb reverse):**
+
+- Login screen: `text_version_login` renders `0.2.4-phase1` at
+  `[0,1854][1080,1920]` (bottom of the 1080×1920 display); "Send log" not
+  present on the login screen.
+- Room list (signed in): `text_version_rooms` renders the version at
+  `[0,1860][1080,1920]` (bottom); compact `btn_send_log` ("SEND LOG")
+  visible.
+- Timeline: `text_version_timeline` renders the version at
+  `[0,1860][1080,1920]` (bottom, below the composer).
+- Upload: with rooms `KaiL`, `kailink-e2e-a-…`, `kailink-e2e-b-…` present,
+  "SEND LOG" delivered the buffer as an `m.room.message` with
+  `msgtype m.file`, `filename kailink-debug-log-20260909-180237.txt` into the
+  `KaiL` room (verified server-side via `/sync`), `mxc://localhost/…`
+  content downloadable via `/_matrix/client/v1/media/download` — the
+  downloaded bytes are the timestamped app log lines.
+- Heuristic fix observed live: the first runtime smoke (marker "contains
+  kail", no word boundary) sent the log into `kailink-e2e-b-…` — fixed to a
+  word-boundary match and re-proven against the same room set.
+
+**E2E gate:** `scripts/emulator-e2e.sh` → exit code 0, `OK (2 tests)`
+(`MatrixE2eTest#twoAccountTimelineDeliveryUnencrypted`,
+`TlsE2eTest#rustlsLoginOverHttpsFailsWithTlsErrorNotInitPanic`).
+
+Residual risk: the debug-log upload is proven once end-to-end on the
+emulator (unencrypted room), not continuously by the gate; encrypted-room
+delivery goes through the same SDK send queue as Chunk-B messages (also
+observed as `m.room.encrypted` in the gate room during the smoke).

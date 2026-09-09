@@ -1,6 +1,7 @@
 package org.box44.kailink.di
 
 import android.content.Context
+import org.box44.kailink.data.log.DebugLog
 import org.box44.kailink.data.matrix.MatrixSdkChannelClient
 import org.box44.kailink.data.push.PushController
 import org.box44.kailink.data.push.UnifiedPushRegistrar
@@ -64,6 +65,9 @@ class AppGraph(private val appContext: Context) {
     val speechSpeaker: SpeechSpeaker = NoOpSpeechSpeaker()
 
     private fun log(message: String) {
+        // Single app-log seam: every message goes to logcat and into the
+        // in-app debug log ring buffer (uploaded via "Send log").
+        DebugLog.append(message)
         android.util.Log.d("KaiLink", message)
     }
 }
