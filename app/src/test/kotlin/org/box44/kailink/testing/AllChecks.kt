@@ -16,5 +16,6 @@ fun runAllChecks() {
     timelineViewModelChecks()
     inMemoryChannelClientChecks()
     pushChainChecks()
+    matrixTlsErrorMappingChecks()
     Checks.finish("build/reports/phase1-checks.txt")
 }

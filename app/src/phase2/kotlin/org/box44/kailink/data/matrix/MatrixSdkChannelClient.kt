@@ -162,19 +162,28 @@ class MatrixSdkChannelClient(
      * passed through UniFFI as an InternalException/ClientException with
      * exactly that text — it means a broken platform initialization and must
      * not be shown to the user as a raw panic.
+     *
+     * TLS/certificate failures (rustls `InvalidCertificate(...)`, handshake
+     * failures) get a readable user message; the raw reqwest/hyper/rustls
+     * details are only written to the app log ([onLog]). The cause chain stays
+     * attached to the exception for diagnostics.
      */
-    private fun readableFailure(context: String, t: Throwable): String {
+    internal fun readableFailure(context: String, t: Throwable): String {
         if (isPlatformVerifierInitFailure(t)) return TLS_INIT_FAILED_MESSAGE
+        if (isTlsCertificateFailure(t)) {
+            onLog("TLS/certificate failure during $context: ${throwableChainText(t)}")
+            return TLS_CERT_FAILED_MESSAGE
+        }
         return "$context: ${t.message ?: "unknown error"}"
     }
 
-    private fun isPlatformVerifierInitFailure(t: Throwable): Boolean {
+    private fun throwableChainText(t: Throwable): String = buildString {
         var current: Throwable? = t
         while (current != null) {
-            if (current.message?.contains(PLATFORM_VERIFIER_MARKER) == true) return true
+            if (isNotEmpty()) append(" <- ")
+            append(current.javaClass.name).append(": ").append(current.message)
             current = current.cause
         }
-        return false
     }
 
     // ------------------------------------------------------------------ Sync
@@ -461,9 +470,46 @@ class MatrixSdkChannelClient(
         private const val LANG = "en"
         private const val UNDECRYPTABLE_PLACEHOLDER = "(encrypted — cannot be decrypted)"
         private const val PLATFORM_VERIFIER_MARKER = "rustls-platform-verifier"
-        private const val TLS_INIT_FAILED_MESSAGE =
+        internal const val TLS_INIT_FAILED_MESSAGE =
             "Could not initialize the secure connection (TLS verification). " +
                 "Please update or reinstall the app."
+
+        // Markers for TLS/certificate failures in the SDK/UniFFI error chain
+        // (rustls: "invalid peer certificate: ...", UniFFI details:
+        // "InvalidCertificate(...)", reqwest/hyper connect errors).
+        // Mirrors the whitelist in TlsE2eTest.
+        internal val TLS_CERT_MARKERS = listOf(
+            "invalid peer certificate",
+            "invalidcertificate",
+            "certificate",
+            "handshake",
+            "hostname",
+            "tls",
+        )
+
+        internal const val TLS_CERT_FAILED_MESSAGE =
+            "Secure connection to the homeserver failed (certificate error). " +
+                "Check the server address."
+
+        internal fun isPlatformVerifierInitFailure(t: Throwable): Boolean {
+            var current: Throwable? = t
+            while (current != null) {
+                if (current.message?.contains(PLATFORM_VERIFIER_MARKER) == true) return true
+                current = current.cause
+            }
+            return false
+        }
+
+        internal fun isTlsCertificateFailure(t: Throwable): Boolean {
+            var current: Throwable? = t
+            while (current != null) {
+                val message = current.message?.lowercase()
+                if (message != null && TLS_CERT_MARKERS.any { message.contains(it) }) return true
+                current = current.cause
+            }
+            return false
+        }
+
         private const val LOGIN_FAILED_LABEL = "Sign-in failed"
         private const val RESTORE_FAILED_LABEL = "Could not restore session"
         private const val CONNECT_FAILED_LABEL = "Could not connect to homeserver"

@@ -1,7 +1,13 @@
 @file:SuppressLint("LogNotTimber", "ObsoleteSdkInt")
 @file:Suppress("KotlinConstantConditions")
 
-// IMPORTANT: this file comes from rustls-platform-verifier and should not be modified locally.
+// IMPORTANT: this file comes from rustls-platform-verifier 0.6.2 and must stay
+// byte-identical to the upstream source EXCEPT for the single local port of
+// matrix-rust-sdk#6323 documented at the revocation check in
+// `verifyCertificateChain` below (removal of the network-based OCSP/CRL
+// revocation fetch that reported valid certificates as `Revoked`,
+// matrix-rust-sdk#6319 / rustls-platform-verifier#221). All certificate
+// validation is preserved; do not weaken TLS here.
 
 /*
  * Copyright (c) 2022 1Password
@@ -291,49 +297,28 @@ internal object CertificateVerifier {
             return VerificationResult(StatusCode.UnknownCert, e.toString())
         }
 
-        // TEST ONLY: Mock test suite cannot attempt to check revocation status if no OSCP data has been stapled,
-        // because Android requires certificates to an specify OCSP responder for network fetch in this case.
-        // If in testing w/o OCSP stapled, short-circuit here - only prior checks apply.
-        if (BuildConfig.TEST && (mockKeystore.size() != 0) && (ocspResponse == null)) {
-            return VerificationResult(StatusCode.Ok)
-        }
-
-        // Try to check the revocation status of the cert, if it is supported.
+        // LOCAL PORT of matrix-rust-sdk#6323 ("fix(sdk): False positives for
+        // revoked HTTPS certs in Android", fixing matrix-rust-sdk#6319):
         //
-        // This is supported at >= API 24, but we're supporting 22 (Android 5) for the best
-        // compatibility.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            // Note:
-            //
-            // 1. Android does not provide any way only to attempt to validate revocation from cached
-            // data like the other platforms do. This means it will always use the network for
-            // certificates which had no stapled response.
-            //
-            // 2: Likely because of 1, Android requires all issued certificates to have some form of
-            // revocation included in their authority information. This doesn't work universally as
-            // issuing certificates in use may omit authority access information (for example the
-            // Let's Encrypt R3 Intermediate Certificate).
-            //
-            // Given these constraints, the best option is to only check revocation information
-            // at the end-entity depth. We will prefer OCSP (to use stapled information if possible).
-            // If there is no stapled OCSP response, Android may use the network to attempt to fetch
-            // one. If OCSP checking fails, it may fall back to fetching CRLs. We allow "soft"
-            // failures, for example transient network errors.
-            //
-            // In the case of a non-public root, such as an internal CA or self-signed certificate,
-            // we opt to skip revocation checks entirely. The only exception is if the server
-            // provided stapled OCSP data, which is an explicit signal and won't introduce non-ideal
-            // platform behavior when attempting validation.
-            //
-            // This is because these are cases where a user or administrator has explicitly opted to
-            // trust a certificate they (at least believe) have control over. These certificates rarely
-            // contain revocation information as well, so these cases don't lose much.
-            // See https://github.com/rustls/rustls-platform-verifier/issues/69 as well.
-            if (ocspResponse == null && !isKnownRoot(validChain.last())) {
-                // Chain validation must have succeeded by this point.
-                return VerificationResult(StatusCode.Ok)
-            }
-
+        // The upstream code let Android fetch OCSP/CRL revocation data over the
+        // network for certificates without a stapled OCSP response. Since
+        // Let's Encrypt ended OCSP support (August 2025), their certificates
+        // only carry a CRL Distribution Point served over cleartext HTTP, which
+        // the Android network stack blocks; the failing revocation check made
+        // the verifier report valid certificates as
+        // `InvalidCertificate(Revoked)` (rustls-platform-verifier#221).
+        //
+        // Upstream matrix-rust-sdk#6323 fixed this by switching Android to a
+        // webpki verifier, which performs no network revocation checks at all.
+        // The prebuilt native library of `sdk-android` cannot be changed here,
+        // so the same faulty path is removed at this seam instead: revocation
+        // data is never fetched over the network; the revocation status is only
+        // checked when the server itself stapled an OCSP response (Android uses
+        // a provided OCSP response without networking). All other validation is
+        // preserved (trust anchors, chain, signatures, validity period, EKU,
+        // and hostname verification in Rust). Revert this port when
+        // rustls-platform-verifier#221 is fixed and released.
+        if (ocspResponse != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val parameters = PKIXBuilderParameters(keystore, null)
 
             val validator = CertPathValidator.getInstance("PKIX")
@@ -344,15 +329,14 @@ internal object CertificateVerifier {
                 PKIXRevocationChecker.Option.ONLY_END_ENTITY
             )
 
-            // Use the OCSP data `rustls` provided, if present.
-            // Its expected that the server only sends revocation data for its own leaf certificate.
+            // Use only the OCSP data `rustls` provided (stapled by the server).
+            // Its expected that the server only sends revocation data for its
+            // own leaf certificate.
             //
-            // If this field is set, then Android will use it and skip any networking to
-            // attempt a fetch for that certificate. Otherwise, it will attempt to fetch it from the network.
+            // If this field is set, then Android will use it and skip any
+            // networking to attempt a fetch for that certificate.
             // Ref: https://cs.android.com/android/platform/superproject/+/master:libcore/ojluni/src/main/java/sun/security/provider/certpath/RevocationChecker.java;l=694
-            ocspResponse?.let { providedResponse ->
-                revocationChecker.ocspResponses = mapOf(endEntity to providedResponse)
-            }
+            revocationChecker.ocspResponses = mapOf(endEntity to ocspResponse)
 
             // Use the custom revocation definition.
             // "Note that when a `PKIXRevocationChecker` is added to `PKIXParameters`, it clones the `PKIXRevocationChecker`;
@@ -378,7 +362,7 @@ internal object CertificateVerifier {
 
                 return VerificationResult(StatusCode.Revoked, e.toString())
             }
-        } else {
+        } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
             // This is allowed to be skipped since revocation checking is best-effort.
             Log.w(TAG, "did not attempt to validate OCSP due to Android version")
         }

@@ -47,3 +47,25 @@
   `syncService().finish()`) — the E2E uses `syncOnce`; the emulator network is broken
   (`10.0.2.2` unreachable) — the run uses `adb reverse` to `127.0.0.1`.
   Commit: `919de4c` (C2b proof: Conduit→ntfy delivery).
+- Android TLS false positive (`InvalidCertificate(Revoked)` for valid
+  certificates, e.g. matrix.org): root cause is the rustls-platform-verifier
+  Android path (vendored `rustls-tls/.../CertificateVerifier.kt`) letting
+  Android fetch OCSP/CRL revocation data over the network. Since Let's Encrypt
+  ended OCSP (August 2025), certificates only carry a CRL distribution point
+  served over cleartext HTTP, which the Android network stack blocks; the
+  failing check reported valid certificates as revoked
+  (matrix-rust-sdk issue #6319, rustls-platform-verifier #221, fixed upstream
+  by matrix-rust-sdk PR #6323 by switching Android to a webpki verifier with
+  no network revocation checks). Choice: the pinned `sdk-android:26.09.08` is
+  the newest release and provably does not contain #6323 (no
+  `webpki-roots`/`rustls-native-certs` symbols in `libmatrix_sdk_ffi.so`), so
+  instead of an impossible upgrade we ported the fix to the only seam we
+  control: the vendored Kotlin verifier never fetches revocation data over the
+  network and only honors server-stapled OCSP responses. All other validation
+  (trust anchors, chain, signatures, validity, EKU, hostname in Rust) is
+  preserved; this matches the upstream post-#6323 validation strength.
+  `MatrixSdkChannelClient` additionally maps TLS/certificate failures to a
+  readable user message ("Secure connection to the homeserver failed
+  (certificate error). Check the server address.") while raw reqwest/hyper
+  details go only to the log — extending the error mapping from `4bdba22`
+  without replacing it.

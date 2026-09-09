@@ -9,9 +9,12 @@ plugins {
 // in the style of element-hq/element-x-android PR 6610: the native library
 // (libmatrix_sdk_ffi.so, rustls-platform-verifier 0.6.2) looks up
 // org.rustls.platformverifier.CertificateVerifier via JNI from the app class
-// loader, so the class must be part of the build. The Kotlin file is kept
-// byte-identical to the vendored source; the BuildConfig.TEST flag (false)
-// replaces the one the original AAR generated. Do not weaken TLS here.
+// loader, so the class must be part of the build. The Kotlin file matches the
+// vendored source except for the local port of matrix-rust-sdk PR #6323
+// (fixes #6319: the network-based OCSP/CRL revocation fetch reported valid
+// certificates as InvalidCertificate(Revoked)); see rustls-tls/README.md and
+// docs/decisions.md. BuildConfig.TEST=false replaces the one the original AAR
+// generated. Do not weaken TLS here.
 android {
     namespace = "org.rustls.platformverifier"
     compileSdk = 36
