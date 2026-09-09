@@ -72,6 +72,7 @@ class FakeChannelClient : ChannelClient {
     var roomsBehavior: () -> List<Room> = { listOf(TEST_ROOM) }
     var sendMessageBehavior: (String, String) -> Unit = { _, _ -> }
     var registerPushEndpointBehavior: (String) -> Unit = {}
+    var startLiveSyncBehavior: () -> Unit = {}
 
     override suspend fun login(homeserverUrl: String, username: String, password: String): Session {
         loginCalls++
@@ -93,6 +94,7 @@ class FakeChannelClient : ChannelClient {
 
     override suspend fun startLiveSync() {
         startLiveSyncCalls++
+        startLiveSyncBehavior()
     }
 
     override suspend fun stopLiveSync() = Unit

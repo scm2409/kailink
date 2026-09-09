@@ -2,6 +2,7 @@ package org.box44.kailink.data.session
 
 import org.box44.kailink.domain.SessionStore
 import org.box44.kailink.domain.model.Session
+import org.box44.kailink.domain.model.SlidingSyncMode
 import java.io.File
 import java.io.FileNotFoundException
 import java.util.Properties
@@ -41,6 +42,9 @@ class FileSessionStore(
             homeserverUrl = homeserverUrl,
             accessToken = accessToken,
             refreshToken = properties.getProperty(KEY_REFRESH_TOKEN),
+            // Sessions persisted before 0.2.5-phase1 have no entry; they
+            // restore with NONE (live sync then requires a fresh sign-in).
+            slidingSyncMode = parseMode(properties.getProperty(KEY_SLIDING_SYNC_MODE)),
         )
     }
 
@@ -52,6 +56,7 @@ class FileSessionStore(
             setProperty(KEY_HOMESERVER_URL, session.homeserverUrl)
             setProperty(KEY_ACCESS_TOKEN, session.accessToken)
             session.refreshToken?.let { setProperty(KEY_REFRESH_TOKEN, it) }
+            setProperty(KEY_SLIDING_SYNC_MODE, session.slidingSyncMode.name)
         }
         file.outputStream().use { stream ->
             properties.store(stream, "KaiLink session (app-private, unencrypted PoC)")
@@ -70,5 +75,9 @@ class FileSessionStore(
         const val KEY_HOMESERVER_URL = "homeserverUrl"
         const val KEY_ACCESS_TOKEN = "accessToken"
         const val KEY_REFRESH_TOKEN = "refreshToken"
+        const val KEY_SLIDING_SYNC_MODE = "slidingSyncMode"
+
+        fun parseMode(name: String?): SlidingSyncMode =
+            SessionStoreSupport.parseMode(name)
     }
 }

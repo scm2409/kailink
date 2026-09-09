@@ -56,6 +56,40 @@ fun roomListViewModelChecks() {
         viewModel.clear()
     }
 
+    Checks.check("refresh keeps the room list usable when live sync is unavailable") {
+        val client = FakeChannelClient()
+        client.startLiveSyncBehavior = {
+            throw org.box44.kailink.domain.ChannelException(
+                "Could not start live sync: Sliding sync version is missing",
+            )
+        }
+        val viewModel = RoomListViewModel(
+            client,
+            MutableStateFlow(org.box44.kailink.domain.push.PushState.NOT_AVAILABLE),
+            viewModelScope(),
+        )
+        // The constructor already kicked off one refresh; count relative.
+        val liveSyncBefore = client.startLiveSyncCalls
+        runBlocking { client.restore(TEST_SESSION) }
+
+        viewModel.refresh()
+
+        expectEquals(liveSyncBefore + 1, client.startLiveSyncCalls, "startLiveSync attempted")
+        expectEquals(
+            listOf(TEST_ROOM.id),
+            viewModel.ui.value.rooms.map { it.id },
+            "Room list still loaded after the live-sync failure",
+        )
+        expectEquals(false, viewModel.ui.value.refreshing, "refreshing reset")
+        expectTrue(
+            viewModel.ui.value.error?.contains("Sliding sync version is missing") == true,
+            "live-sync failure surfaced, not silenced",
+        )
+        // The "Send log" action stays available (session exists).
+        expectNotNull(viewModel.ui.value.userId, "send-log availability follows the session")
+        viewModel.clear()
+    }
+
     Checks.check("Logout is delegated to the client") {
         val client = FakeChannelClient()
         val viewModel = RoomListViewModel(

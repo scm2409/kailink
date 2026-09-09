@@ -93,3 +93,88 @@
   simultaneously inside `activity_main`, so per-screen footer views use
   distinct IDs (`text_version_login` / `text_version_rooms` /
   `text_version_timeline`).
+
+## 0.2.5-phase1: native sliding sync discovery (live-sync fix)
+
+Root cause (0.2.4-phase1 behavior): the FFI `ClientBuilder` of the pinned
+`sdk-android:26.09.08` defaults `sliding_sync_version_builder` to
+`SlidingSyncVersionBuilder::None`, so no version discovery happens and the
+built client carries `Version::None`. The SDK `SyncService` ("live sync")
+builds its `SlidingSync` from the client version and fails for `Version::None`
+with `VersionIsMissing` ("Sliding sync version is missing") — even
+on homeservers that support native sliding sync such as matrix.org. `syncOnceV2`
+(classic `/sync`) kept working, which is why the PoC appeared functional.
+
+Fix (SDK-sanctioned, no workaround): `MatrixSdkChannelClient.buildClient`
+first builds with `SlidingSyncVersionBuilder.DISCOVER_NATIVE`. During
+`ClientBuilder.build()` this performs a `GET /_matrix/client/versions`
+request and selects `Version::Native` iff the response's
+`unstable_features` contain `"org.matrix.simplified_msc3575": true`
+(ruma `FeatureFlag::Msc4186`); otherwise the build fails with
+`VersionBuilderError::NativeVersionIsUnset` (UniFFI:
+`ClientBuildException.SlidingSyncVersion`). Only after a failed discovery
+build is the client rebuilt once with the SDK default
+`SlidingSyncVersionBuilder.NONE` (classic `/sync` semantics; covers both a
+capability-less homeserver such as Conduit in the E2E gate and discovery
+transport errors) — never pre-emptively. Live sync is never disabled or
+silently swallowed: on NONE sessions `startLiveSync` still runs and its
+failure is surfaced (room list error + app log), while sign-in, restore,
+`syncOnceV2`, send log and file uploads keep working. "Send log"
+availability follows the authenticated session (`RoomListUiState.userId`),
+never the live-sync state. The detected mode is stored in `Session`
+(`SlidingSyncMode`, persisted in both session stores; legacy sessions
+restore as NONE) and is passed back on restore, because the FFI restore
+path sets the client's sliding sync version from the `Session` record —
+without it a restored NATIVE session would degrade to NONE again.
+
+Live verification (2026-09-09): `GET https://matrix.org/_matrix/client/versions`
+returns `unstable_features["org.matrix.simplified_msc3575"] = true`
+(native discovery succeeds there); Conduit does not serve the flag, which
+is the only reason the E2E gate's Conduit session falls back to NONE.
+
+Verification sources for `sdk-android:26.09.08` (artifact not git-tagged
+upstream; verified against current upstream main at review time plus the
+vendored AAR classes):
+- `bindings/matrix-sdk-ffi/src/client_builder.rs` — `ClientBuilder::new()`
+  defaults `sliding_sync_version_builder: SlidingSyncVersionBuilder::None`;
+  `build()` maps `DiscoverNative` to the SDK `VersionBuilder::DiscoverNative`;
+  `ClientBuildError::SlidingSyncVersion(VersionBuilderError)`.
+- `crates/matrix-sdk/src/client/builder/mod.rs` — core `ClientBuilder::build()`
+  performs `get_supported_versions(&homeserver, &http_client)` (GET `/versions`)
+  only when `VersionBuilder::needs_get_supported_versions()` (DiscoverNative).
+- `crates/matrix-sdk/src/sliding_sync/client.rs` — `VersionBuilder::build`:
+  `Version::Native` iff `supported.features.contains(&FeatureFlag::Msc4186)`,
+  else `VersionBuilderError::NativeVersionIsUnset`; `MissingVersionsResponse`
+  when the `/versions` response is absent.
+- ruma `crates/ruma-common/src/api/metadata.rs` —
+  `FeatureFlag::Msc4186` is `#[ruma_enum(rename = "org.matrix.simplified_msc3575")]`.
+- `crates/matrix-sdk/src/sliding_sync/builder.rs` + `error.rs` —
+  `SlidingSyncBuilder::build` fails for `Version::None` with
+  `VersionIsMissing` ("Sliding sync version is missing").
+- `bindings/matrix-sdk-ffi/src/client.rs` — `restore_session_with` sets the
+  client version from `session.sliding_sync_version`
+  (`self.inner.set_sliding_sync_version(...)`).
+- `bindings/matrix-sdk-ffi/src/platform/mod.rs` — tracing file layer:
+  hourly rotation (`Rotation::HOURLY`), format
+  `{timestamp} {LEVEL} {target}: {message} | {file}:{line}`, defaults 10 MiB
+  total / 7 days (KaiLink: 2 MiB).
+
+Library documentation provenance for this decision (exact pinned URLs):
+- Context7 pinned IDs (AGENTS.md "Library docs"):
+  `https://context7.com/websites/developer_android_develop_ui_compose`,
+  `https://context7.com/gradle/gradle`,
+  `https://context7.com/matrix-org/matrix-rust-sdk`.
+- DeepWiki: `https://deepwiki.com/matrix-org/matrix-rust-sdk`
+  (FFI default value, discovery flow, `VersionIsMissing` origin).
+
+SDK diagnostics (0.2.5-phase1): `KaiLinkApp.initPlatform` now also passes a
+`TracingFileConfiguration` (dir `SdkLogTailer.TRACE_DIRECTORY` under
+`cacheDir`, prefix/suffix `kailink-sdk`/`.log`, 2 MiB total, 7 days). The
+Rust file layer (see `bindings/matrix-sdk-ffi/src/platform/mod.rs`) writes
+hourly-rotated files; `SdkLogTailer` (AppGraph, 5 s cadence) tails appended
+bytes with per-file offsets into `SdkLogBridge`, which keeps ERROR/WARN
+always, sync-relevant INFO targets (`matrix_sdk::client`,
+`matrix_sdk::sliding_sync`, `matrix_sdk::http_client`), never
+DEBUG/TRACE, truncates to 400 chars, and appends into the bounded
+`DebugLog` ring buffer — so "Send log" dumps contain SDK/HTTP diagnostics
+without credentials (G7).

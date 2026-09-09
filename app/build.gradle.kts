@@ -14,8 +14,8 @@ android {
         applicationId = "org.box44.kailink"
         minSdk = 28
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.4-phase1"
+        versionCode = 3
+        versionName = "0.2.5-phase1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

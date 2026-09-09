@@ -11,6 +11,7 @@ import org.box44.kailink.domain.model.Message
 import org.box44.kailink.domain.model.MessageDirection
 import org.box44.kailink.domain.model.Room
 import org.box44.kailink.domain.model.Session
+import org.box44.kailink.domain.model.SlidingSyncMode
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import org.matrix.rustcomponents.sdk.Client
+import org.matrix.rustcomponents.sdk.ClientBuildException
 import org.matrix.rustcomponents.sdk.ClientBuilder
 import org.matrix.rustcomponents.sdk.CreateRoomParameters
 import org.matrix.rustcomponents.sdk.EventOrTransactionId
@@ -34,6 +36,7 @@ import org.matrix.rustcomponents.sdk.RoomVisibility
 import org.matrix.rustcomponents.sdk.Room as SdkRoom
 import org.matrix.rustcomponents.sdk.Session as SdkSession
 import org.matrix.rustcomponents.sdk.SlidingSyncVersion
+import org.matrix.rustcomponents.sdk.SlidingSyncVersionBuilder
 import org.matrix.rustcomponents.sdk.SqliteStoreBuilder
 import org.matrix.rustcomponents.sdk.SyncService
 import org.matrix.rustcomponents.sdk.SyncSettingsV2
@@ -136,11 +139,62 @@ class MatrixSdkChannelClient(
     private suspend fun buildClient(homeserverUrl: String): Client {
         storeDir.mkdirs()
         cacheDir.mkdirs()
+        // Sliding sync discovery (docs/decisions.md, 0.2.5-phase1): the FFI
+        // ClientBuilder defaults to `SlidingSyncVersionBuilder.None`, which
+        // makes every `SyncService` ("live sync") fail with
+        // "Sliding sync version is missing" — even on homeservers that
+        // support native sliding sync (e.g. matrix.org). The SDK-sanctioned
+        // path is `DiscoverNative`: `ClientBuilder.build()` fetches
+        // `GET /versions` and selects NATIVE iff the server advertises
+        // `org.matrix.simplified_msc3575` (FeatureFlag::Msc4186).
+        // Servers without that flag (e.g. Conduit in the E2E gate) make the
+        // build fail with ClientBuildException.SlidingSyncVersion; in that
+        // case we rebuild with the SDK default (NONE) so sign-in, restore,
+        // and syncOnceV2 (classic /sync) keep working — live sync stays
+        // unavailable there, exactly as in 0.2.4-phase1.
+        return try {
+            buildClientWithSlidingSync(homeserverUrl, firstChoiceVersionBuilder)
+        } catch (first: Throwable) {
+            // The discovery build can fail for two reasons: the homeserver
+            // does not support native sliding sync
+            // (ClientBuildException.SlidingSyncVersion, e.g. Conduit in the
+            // E2E gate), or one of the discovery requests itself failed
+            // (network/TLS during well-known or /versions — e.g. the
+            // self-signed TLS gate). In both cases the client is rebuilt
+            // once with the SDK default ([fallbackVersionBuilder]): sign-in,
+            // restore and syncOnceV2 (classic /sync) then behave exactly as
+            // in 0.2.4-phase1; healthy servers keep native live sync. The
+            // failure is logged, never silenced.
+            onLog(
+                if (isSlidingSyncVersionBuildFailure(first)) {
+                    // Server reachable, but no native sliding sync capability:
+                    // Conduit-class homeserver — the fallback is the SDK's
+                    // documented path for such servers (live sync then stays
+                    // unavailable, as in 0.2.4-phase1).
+                    "Homeserver without native sliding sync " +
+                        "(${first.message}); retrying with classic /sync"
+                } else {
+                    "Sliding sync discovery failed (${first.message}); retrying without sliding sync"
+                },
+            )
+            try {
+                buildClientWithSlidingSync(homeserverUrl, fallbackVersionBuilder)
+            } catch (second: Throwable) {
+                throw ChannelException(readableFailure(CONNECT_FAILED_LABEL, second), second)
+            }
+        }
+    }
+
+    private suspend fun buildClientWithSlidingSync(
+        homeserverUrl: String,
+        versionBuilder: SlidingSyncVersionBuilder,
+    ): Client {
         // UniFFI builders are immutable (Rust: self: Arc<Self> -> Arc<Self>):
         // every setter returns a NEW builder; the return value must be
         // chained, otherwise the setting is lost.
         var builder = ClientBuilder()
         builder = builder.homeserverUrl(homeserverUrl)
+        builder = builder.slidingSyncVersionBuilder(versionBuilder)
         builder = builder.sqliteStore(
             SqliteStoreBuilder(
                 storeDir.resolve("state.sqlite").absolutePath,
@@ -152,9 +206,11 @@ class MatrixSdkChannelClient(
             builder = builder.decryptionSettings(DecryptionSettings(TrustRequirement.UNTRUSTED))
         }
         return try {
-            builder.build()
-        } catch (t: Throwable) {
-            throw ChannelException(readableFailure(CONNECT_FAILED_LABEL, t), t)
+            val client = builder.build()
+            onLog("Sliding sync version: ${client.slidingSyncVersion()}")
+            client
+        } finally {
+            runCatching { builder.close() }
         }
     }
 
@@ -456,6 +512,10 @@ class MatrixSdkChannelClient(
         homeserverUrl = sdk.homeserverUrl,
         accessToken = sdk.accessToken,
         refreshToken = sdk.refreshToken,
+        // The detected sliding sync version must survive persistence:
+        // the FFI restore path (restoreSessionWith) sets the client's
+        // version from this field (docs/decisions.md, 0.2.5-phase1).
+        slidingSyncMode = MatrixSdkChannelClient.sdkVersionToDomainMode(sdk.slidingSyncVersion),
     )
 
     private fun toSdkSession(session: Session): SdkSession = SdkSession(
@@ -465,7 +525,7 @@ class MatrixSdkChannelClient(
         deviceId = session.deviceId,
         homeserverUrl = session.homeserverUrl,
         oauthData = null,
-        slidingSyncVersion = SlidingSyncVersion.NONE,
+        slidingSyncVersion = MatrixSdkChannelClient.domainModeToSdkVersion(session.slidingSyncMode),
     )
 
     private fun toPatch(diff: TimelineDiff): TimelinePatch? = when (diff) {
@@ -561,6 +621,57 @@ class MatrixSdkChannelClient(
                 current = current.cause
             }
             return false
+        }
+
+        /**
+         * SDK-sanctioned sliding sync discovery (0.2.5-phase1):
+         * `SlidingSyncVersionBuilder.DiscoverNative` makes
+         * `ClientBuilder.build()` fetch `GET /versions` and select
+         * `Version::Native` iff the response's `unstable_features` contain
+         * `org.matrix.simplified_msc3575` (`FeatureFlag::Msc4186`),
+         * otherwise the build fails with
+         * `ClientBuildError::SlidingSyncVersion(NativeVersionIsUnset)`
+         * (crates/matrix-sdk/src/sliding_sync/client.rs in the pinned SDK).
+         */
+        internal val firstChoiceVersionBuilder: SlidingSyncVersionBuilder =
+            SlidingSyncVersionBuilder.DISCOVER_NATIVE
+
+        /**
+         * Fallback when the discovery build (first attempt) failed: always
+         * the SDK default NONE. Two failure classes reach it: a server
+         * without native sliding sync
+         * (`ClientBuildException.SlidingSyncVersion`/`NativeVersionIsUnset`)
+         * and discovery-transport failures (network/TLS during the
+         * well-known or `/versions` request of the discovery build). The
+         * second build then carries the exact pre-0.2.5 semantics (no
+         * discovery traffic); its error — if any — is surfaced.
+         */
+        internal val fallbackVersionBuilder: SlidingSyncVersionBuilder =
+            SlidingSyncVersionBuilder.NONE
+
+        /**
+         * True if the error chain contains the SDK's sliding sync version
+         * build error (`ClientBuildError::SlidingSyncVersion`, e.g.
+         * `NativeVersionIsUnset`): the homeserver does not advertise native
+         * sliding sync via `/versions` (`org.matrix.simplified_msc3575`).
+         */
+        internal fun isSlidingSyncVersionBuildFailure(t: Throwable): Boolean {
+            var current: Throwable? = t
+            while (current != null) {
+                if (current is ClientBuildException.SlidingSyncVersion) return true
+                current = current.cause
+            }
+            return false
+        }
+
+        internal fun sdkVersionToDomainMode(version: SlidingSyncVersion): SlidingSyncMode = when (version) {
+            SlidingSyncVersion.NATIVE -> SlidingSyncMode.NATIVE
+            SlidingSyncVersion.NONE -> SlidingSyncMode.NONE
+        }
+
+        internal fun domainModeToSdkVersion(mode: SlidingSyncMode): SlidingSyncVersion = when (mode) {
+            SlidingSyncMode.NATIVE -> SlidingSyncVersion.NATIVE
+            SlidingSyncMode.NONE -> SlidingSyncVersion.NONE
         }
 
         internal fun isTlsCertificateFailure(t: Throwable): Boolean {

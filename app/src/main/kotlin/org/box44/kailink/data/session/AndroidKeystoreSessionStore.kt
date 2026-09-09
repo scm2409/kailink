@@ -94,6 +94,7 @@ class AndroidKeystoreSessionStore(
             setProperty(FileSessionStore.KEY_HOMESERVER_URL, session.homeserverUrl)
             setProperty(FileSessionStore.KEY_ACCESS_TOKEN, session.accessToken)
             session.refreshToken?.let { setProperty(FileSessionStore.KEY_REFRESH_TOKEN, it) }
+            setProperty(FileSessionStore.KEY_SLIDING_SYNC_MODE, session.slidingSyncMode.name)
         }
         val buffer = ByteArrayOutputStream()
         properties.store(buffer, null)
@@ -112,6 +113,9 @@ class AndroidKeystoreSessionStore(
             homeserverUrl = homeserverUrl,
             accessToken = accessToken,
             refreshToken = properties.getProperty(FileSessionStore.KEY_REFRESH_TOKEN),
+            slidingSyncMode = SessionStoreSupport.parseMode(
+                properties.getProperty(FileSessionStore.KEY_SLIDING_SYNC_MODE),
+            ),
         )
     }
 

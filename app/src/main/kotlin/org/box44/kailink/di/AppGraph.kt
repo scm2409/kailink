@@ -1,7 +1,9 @@
 package org.box44.kailink.di
 
 import android.content.Context
+import java.io.File
 import org.box44.kailink.data.log.DebugLog
+import org.box44.kailink.data.log.SdkLogTailer
 import org.box44.kailink.data.matrix.MatrixSdkChannelClient
 import org.box44.kailink.data.push.PushController
 import org.box44.kailink.data.push.UnifiedPushRegistrar
@@ -14,10 +16,11 @@ import org.box44.kailink.domain.speech.NoOpSpeechSpeaker
 import org.box44.kailink.domain.speech.NoOpSpeechTranscriber
 import org.box44.kailink.domain.speech.SpeechSpeaker
 import org.box44.kailink.domain.speech.SpeechTranscriber
-import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Manual dependency wiring of the PoC (deliberately no Hilt/Dagger).
@@ -64,10 +67,43 @@ class AppGraph(private val appContext: Context) {
     val speechTranscriber: SpeechTranscriber = NoOpSpeechTranscriber()
     val speechSpeaker: SpeechSpeaker = NoOpSpeechSpeaker()
 
+    /**
+     * Tails the rotating SDK tracing files (KaiLinkApp `initPlatform`
+     * `writeToFiles`) into the DebugLog ring buffer — SDK/HTTP client
+     * diagnostics reach the "Send log" dump without the app having to
+     * run a sync loop (convention: AGENTS.md).
+     */
+    private val sdkLogTailer = SdkLogTailer(
+        directory = File(appContext.cacheDir, SdkLogTailer.TRACE_DIRECTORY),
+    )
+
+    init {
+        // SDK diagnostics → DebugLog (bounded: see SdkLogTailer). Failures
+        // of the tailer itself are logged once, never looped into spam.
+        appScope.launch {
+            var failureLogged = false
+            while (true) {
+                delay(SDK_LOG_POLL_MILLIS)
+                runCatching { sdkLogTailer.poll() }
+                    .onFailure { t ->
+                        if (!failureLogged) {
+                            failureLogged = true
+                            log("SDK log tail failed: ${t.message}")
+                        }
+                    }
+            }
+        }
+    }
+
     private fun log(message: String) {
         // Single app-log seam: every message goes to logcat and into the
         // in-app debug log ring buffer (uploaded via "Send log").
         DebugLog.append(message)
         android.util.Log.d("KaiLink", message)
+    }
+
+    private companion object {
+        /** SDK tracing file poll cadence (bounded ingests, see SdkLogTailer). */
+        const val SDK_LOG_POLL_MILLIS = 5_000L
     }
 }

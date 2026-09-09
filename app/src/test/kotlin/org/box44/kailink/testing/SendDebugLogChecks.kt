@@ -127,6 +127,38 @@ fun sendDebugLogChecks() {
         viewModel.clear()
     }
 
+    Checks.check("sendDebugLog works with a session while live sync is unavailable") {
+        val client = FakeChannelClient()
+        val kaiLRoom = TEST_ROOM.copy(id = "!kail-ls:example.org", displayName = "KaiL")
+        client.roomsBehavior = { listOf(kaiLRoom) }
+        // Live sync unavailable (server without sliding sync, e.g. Conduit
+        // in the E2E gate, or the matrix.org failure fixed in
+        // 0.2.5-phase1): the action needs only the session, never the
+        // sync state.
+        client.startLiveSyncBehavior = {
+            throw org.box44.kailink.domain.ChannelException(
+                "Could not start live sync: Sliding sync version is missing",
+            )
+        }
+        val logLines = mutableListOf<String>()
+        val viewModel = RoomListViewModel(
+            client,
+            MutableStateFlow(PushState.NOT_AVAILABLE),
+            viewModelScope(),
+            logSource = { "buffered log line" },
+            logSink = { logLines.add(it) },
+        )
+        runBlocking { client.restore(TEST_SESSION) }
+
+        viewModel.sendDebugLog()
+
+        expectEquals(1, client.sendFileCalls.size, "file sent although live sync is unavailable")
+        expectEquals(kaiLRoom.id, client.sendFileCalls.single().roomId, "KaiL room resolved")
+        expectEquals(false, viewModel.ui.value.sendingLog, "busy flag reset")
+        expectEquals(1, logLines.count { it.contains("Debug log sent") }, "send recorded in log")
+        viewModel.clear()
+    }
+
     Checks.check("sendDebugLog ignores a second call while busy") {
         val client = FakeChannelClient()
         val kaiLRoom = TEST_ROOM.copy(id = "!kail3:example.org", displayName = "KaiL")

@@ -17,7 +17,9 @@ fun runAllChecks() {
     inMemoryChannelClientChecks()
     pushChainChecks()
     matrixTlsErrorMappingChecks()
+    slidingSyncChecks()
     debugLogChecks()
+    sdkLogChecks()
     sendDebugLogChecks()
     Checks.finish("build/reports/phase1-checks.txt")
 }

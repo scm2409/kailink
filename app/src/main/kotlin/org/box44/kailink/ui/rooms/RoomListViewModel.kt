@@ -54,7 +54,15 @@ class RoomListViewModel(
             channelClient.events.collect { event ->
                 when (event) {
                     is ChannelEvent.RoomsUpdated -> _ui.update {
-                        it.copy(rooms = event.rooms, refreshing = false, error = null)
+                        it.copy(
+                            rooms = event.rooms,
+                            refreshing = false,
+                            error = null,
+                            // Follow the session state: the "Send log"
+                            // action is available whenever a session
+                            // exists — independently of live sync.
+                            userId = channelClient.activeSession?.userId,
+                        )
                     }
                     is ChannelEvent.ClientError -> _ui.update {
                         it.copy(refreshing = false, error = event.message)
@@ -71,8 +79,27 @@ class RoomListViewModel(
         scope.launch {
             try {
                 channelClient.syncOnce()
-                channelClient.startLiveSync()
-                _ui.update { it.copy(rooms = channelClient.rooms(), refreshing = false) }
+                var liveSyncFailure: String? = null
+                try {
+                    channelClient.startLiveSync()
+                } catch (t: Throwable) {
+                    // Live sync is best-effort for the room list: servers
+                    // without sliding sync (Conduit in the E2E gate) must
+                    // not blank the room list or block the other actions.
+                    // The failure is still surfaced, never silenced.
+                    liveSyncFailure = t.message ?: "Live sync unavailable"
+                }
+                _ui.update {
+                    it.copy(
+                        rooms = channelClient.rooms(),
+                        refreshing = false,
+                        error = liveSyncFailure,
+                        // Refreshed with every sync so the "Send log"
+                        // action appears as soon as a session exists —
+                        // independently of the live sync state.
+                        userId = channelClient.activeSession?.userId,
+                    )
+                }
             } catch (t: Throwable) {
                 _ui.update {
                     it.copy(refreshing = false, error = t.message ?: "Refresh failed")
