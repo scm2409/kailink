@@ -11,6 +11,8 @@ fun runAllChecks() {
     fileSessionStoreChecks()
     pushControllerChecks()
     pushNotificationPayloadChecks()
+    pushPayloadChecks()
+    pushMessageHandlerChecks()
     loginViewModelChecks()
     roomListViewModelChecks()
     timelineViewModelChecks()

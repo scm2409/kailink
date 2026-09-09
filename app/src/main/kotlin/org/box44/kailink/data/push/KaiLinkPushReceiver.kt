@@ -14,10 +14,10 @@ import org.unifiedpush.android.connector.data.PushMessage
  * Android receiver of the UnifiedPush chain (see docs/features/push.md).
  *
  * `onMessage` is goAsync-guarded: the broadcast deadline is held via
- * `goAsync()` while a coroutine performs the real sync
- * (`ChannelClient.syncOnce()`), then renders a notification from the
- * most recently synchronized room list ([PushNotifier] with the pure
- * [PushNotificationPayload]). The state machine [PushController] remains
+ * `goAsync()` while [PushMessageHandler] performs the real push path —
+ * payload parse → session restore (cold start) → sync → notification
+ * resolution (SDK `NotificationClient`, room-list fallback) → render
+ * ([PushNotifier]). The state machine [PushController] remains
  * responsible for endpoint/failure events; app logic and domain stay
  * Android-free.
  */
@@ -29,14 +29,9 @@ class KaiLinkPushReceiver : MessagingReceiver() {
         val notifier = PushNotifier(context.applicationContext)
         graph.appScope.launch {
             try {
-                val client = graph.channelClient
-                client.syncOnce()
-                val rooms = runCatching { client.rooms() }
-                    .onFailure { Log.w(TAG, "Room list after push sync failed: ${it.message}") }
-                    .getOrDefault(emptyList())
-                PushNotificationPayload.fromLatest(rooms)?.let(notifier::show)
+                graph.pushMessageHandler.handle(message.content)?.let(notifier::show)
             } catch (t: Throwable) {
-                Log.w(TAG, "Push sync failed: ${t.message}")
+                Log.w(TAG, "Push handling failed: ${t.message}")
             } finally {
                 pending.finish()
             }

@@ -6,6 +6,7 @@ import org.box44.kailink.data.log.DebugLog
 import org.box44.kailink.data.log.SdkLogTailer
 import org.box44.kailink.data.matrix.MatrixSdkChannelClient
 import org.box44.kailink.data.push.PushController
+import org.box44.kailink.data.push.PushMessageHandler
 import org.box44.kailink.data.push.UnifiedPushRegistrar
 import org.box44.kailink.data.session.AndroidKeystoreSessionStore
 import org.box44.kailink.domain.ChannelClient
@@ -44,7 +45,7 @@ class AppGraph(private val appContext: Context) {
         File(appContext.filesDir, "kailink/session.enc"),
     )
 
-    val channelClient: ChannelClient = MatrixSdkChannelClient(
+    private val matrixChannelClient = MatrixSdkChannelClient(
         sessionStore = sessionStore,
         storeDir = File(appContext.filesDir, "matrix/store"),
         cacheDir = File(appContext.cacheDir, "matrix/cache"),
@@ -53,6 +54,8 @@ class AppGraph(private val appContext: Context) {
         onLog = ::log,
     )
 
+    val channelClient: ChannelClient = matrixChannelClient
+
     val pushController: PushController = PushController(
         channelClient = channelClient,
         scope = appScope,
@@ -60,6 +63,21 @@ class AppGraph(private val appContext: Context) {
     )
 
     val pushTrigger: PushRegistrationTrigger = UnifiedPushRegistrar(appContext, pushController)
+
+    /**
+     * Real push→notification path of the receiver: payload parse →
+     * session restore (cold start) → sync → notification resolution.
+     * Resolution uses the SDK NotificationClient for the pushed room/event
+     * and falls back to the room list (docs/features/push.md).
+     */
+    val pushMessageHandler: PushMessageHandler = PushMessageHandler(
+        channelClient = channelClient,
+        sessionStore = sessionStore,
+        resolveNotification = { payload ->
+            matrixChannelClient.fetchNotification(payload?.roomId, payload?.eventId)
+        },
+        onLog = ::log,
+    )
 
     val pushState get() = pushController.state
 

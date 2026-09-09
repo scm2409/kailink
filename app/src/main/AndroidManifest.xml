@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Push notifications (API 33+; runtime grant by the user). -->
@@ -22,11 +23,16 @@
             </intent-filter>
         </activity>
 
-        <!-- UnifiedPush chain: connector broadcasts → PushController (docs/features/push.md) -->
+        <!-- UnifiedPush chain: connector broadcasts → PushController /
+             PushMessageHandler (docs/features/push.md). exported=true is
+             required: the distributor (e.g. ntfy) delivers the broadcasts
+             as another app targeting this package (same contract as the
+             connector docs and the Element X receiver manifest). -->
         <receiver
             android:name=".data.push.KaiLinkPushReceiver"
             android:enabled="true"
-            android:exported="false">
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
             <intent-filter>
                 <action android:name="org.unifiedpush.android.connector.MESSAGE" />
                 <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />

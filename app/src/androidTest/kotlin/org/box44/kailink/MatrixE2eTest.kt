@@ -14,6 +14,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.box44.kailink.data.matrix.MatrixSdkChannelClient
 import org.box44.kailink.data.push.PushController
+import org.box44.kailink.data.push.PushPayload
 import org.box44.kailink.data.session.FileSessionStore
 import org.box44.kailink.domain.ChannelClient
 import org.box44.kailink.domain.ChannelEvent
@@ -250,6 +251,54 @@ class MatrixE2eTest {
         harness.report("C2b: ntfy response: ${lastNtfy.take(400)}")
         assertTrue("C2b: no publish at ntfy for topic $topic (Conduit→ntfy delivery missing)", delivered)
         harness.report("C2b ok: Conduit→ntfy delivery proven (topic $topic)")
+
+        // C2c (Chunk C): the app side must be able to consume the delivered
+        // UnifiedPush message. ntfy publishes the entire notify body to the
+        // topic (server_matrix.go), so the cached ntfy message field IS the
+        // bytes KaiLinkPushReceiver would receive — parse them with the
+        // app-side parser and assert the pushed room. The cache response is
+        // JSON, so the message value arrives with JSON escapes which are
+        // undone in one left-to-right pass (same semantics as the receiver:
+        // the distributor hands over the decoded message bytes).
+        val messageMatch = Regex("\"message\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").find(lastNtfy)
+        val upMessage = messageMatch?.groupValues?.get(1)?.let(::unescapeJson)
+        checkNotNull(upMessage) { "C2c: ntfy cache has no message field: ${lastNtfy.take(200)}" }
+        val payload = PushPayload.parse(upMessage.toByteArray())
+        checkNotNull(payload) { "C2c: UnifiedPush payload not parseable: ${upMessage.take(200)}" }
+        assertEquals("C2c: parsed room_id mismatch", roomId, payload.roomId)
+        harness.report("C2c ok: app-side payload parses (roomId=${payload.roomId}, eventId=${payload.eventId}, unread=${payload.unread})")
+    }
+
+    private fun unescapeJson(value: String): String {
+        val result = StringBuilder(value.length)
+        var index = 0
+        while (index < value.length) {
+            val character = value[index]
+            if (character != '\\' || index + 1 >= value.length) {
+                result.append(character)
+                index++
+                continue
+            }
+            when (val next = value[index + 1]) {
+                '"' -> result.append('"')
+                '\\' -> result.append('\\')
+                '/' -> result.append('/')
+                'n' -> result.append('\n')
+                'r' -> result.append('\r')
+                't' -> result.append('\t')
+                'u' -> {
+                    val hex = value.substring(index + 2, (index + 6).coerceAtMost(value.length))
+                    hex.toIntOrNull(16)?.let { code -> result.append(code.toChar()) }
+                    index += 4
+                }
+                else -> {
+                    result.append(character)
+                    result.append(next)
+                }
+            }
+            index += 2
+        }
+        return result.toString()
     }
 
     private suspend fun runEncryptedLeg(

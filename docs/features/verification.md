@@ -296,3 +296,64 @@ Residual risk: the debug-log upload is proven once end-to-end on the
 emulator (unencrypted room), not continuously by the gate; encrypted-room
 delivery goes through the same SDK send queue as Chunk-B messages (also
 observed as `m.room.encrypted` in the gate room during the smoke).
+
+## 8. Chunk C — push→notification path (2026-09-09)
+
+**V1 (JVM):** `./gradlew testDebugUnitTest assembleDebug --offline` →
+`BUILD SUCCESSFUL`; JUnit `AllChecksTest` runs all 94 checks (was 80 at
+the start of this chunk; +14 new), report
+`app/build/reports/phase1-checks.txt`: `Checks: 94, passed: 94,
+failed: 0`. New check groups: `pushPayloadChecks` (5: wrapped/flat/
+order-tolerant parsing, non-Matrix rejection, escaped quotes),
+`pushMessageHandlerChecks` (6: cold-start restore→sync→resolve, warm
+start, invalid-payload wake-up semantics, dropped push without session,
+restore failure, resolver-failure fallback),
+`PushNotificationPayloadChecks` +3 (fromRoom room-targeting, fallback,
+null cases).
+
+**E2E gate:** `scripts/emulator-e2e.sh` (emulator kailink-atd35,
+Conduit + ntfy + nginx-TLS containers, `adb reverse`) — three runs
+observed:
+
+1. Run 1: the Gradle build inside the gate died with "Gradle build daemon
+   disappeared" (`:app:compileDebugAndroidTestKotlin` /
+   `:app:compileEmulatorDebugKotlin` in flight) — infrastructure failure
+   (emulator + 3 containers + 3 GiB daemon heap on the 8 GiB box), not a
+   code failure; no test ran.
+2. Run 2 after freeing memory (`./gradlew --stop`, Kotlin daemon
+   stopped): Chunk A + restore + C2 (pusher registration, `GET /pushers`
+   with `app_id org.box44.kailink`, `data.url
+   http://kailink-e2e-ntfy/_matrix/push/v1/notify`, `event_id_only`) +
+   C2b (Conduit→ntfy publish) passed; the new **C2c assertion failed
+   correctly**: `C2c: UnifiedPush payload not parseable:
+   {\"notification\":{\"event_id\":…,\"room_id\":…}}` — the test had
+   captured the JSON-escaped `message` field without unescaping it. The
+   app-side parser was right to reject the escaped bytes; the delivered
+   payload (seen verbatim in the failure) confirmed the expected wrapped
+   shape including `room_id` and `counts.unread`. Fix: single-pass JSON
+   unescape of the captured value in the test (same semantics as the
+   distributor handing over decoded message bytes). No gate check was
+   weakened.
+3. Run 3 (final): **exit code 0, `OK (2 tests)`** (`MatrixE2eTest#
+   twoAccountTimelineDeliveryUnencrypted` incl. the C2c leg,
+   `TlsE2eTest#rustlsLoginOverHttpsFailsWithTlsErrorNotInitPanic`),
+   `Time: 274.766`. C2c evidence (logcat `KaiLinkE2E`):
+   `C2c ok: app-side payload parses (roomId=!7PSZ…, eventId=$KJg4…,
+   unread=2)` — the app-side `PushPayload` parser understands the
+   payload of the real Conduit→ntfy→UnifiedPush chain.
+
+**V2/V3 (build + structure):** final `./gradlew testDebugUnitTest
+assembleDebug --offline` → `BUILD SUCCESSFUL` (80 tasks). Staged APKs
+(`dist/`, untracked): `kailink-0.2.6-phase1-arm64-debug.apk`
+(77,623,264 bytes, SHA-256 `c1cfb8747e6428b85ebda2499c8cf5614210bdba68e8816abc3b42ab8c801b8f`)
+and `kailink-0.2.6-phase1-x86_64-emulatorDebug.apk`
+(84,186,311 bytes). `aapt2 dump badging` on the staged arm64 APK:
+`package: name='org.box44.kailink' versionCode='4'
+versionName='0.2.6-phase1'`, and the manifest dump shows
+`KaiLinkPushReceiver` with `exported=true` (was `exported=false`) and
+the connector actions — the structure fix that lets an ntfy
+distributor actually deliver UnifiedPush broadcasts to the app.
+
+**Not observed:** a real notification render on screen (needs the ntfy
+distributor app installed on the emulator/device — V4, manual protocol
+MT-6).

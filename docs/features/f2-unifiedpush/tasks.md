@@ -12,4 +12,8 @@ Open (Phase 2):
 - [x] Integrate the UnifiedPush connector (trigger + receiver + manifest).
       *(2026-09-08: `UnifiedPushRegistrar`, `KaiLinkPushReceiver`,
       manifest entry; compiles, tests 39/39.)*
-- [ ] NotificationClient wiring (notifications) – optional.
+- [x] NotificationClient wiring (notifications).
+      *(2026-09-09, Chunk C: `PushPayload` parser +
+      `PushMessageHandler` with cold-start session restore;
+      `MatrixSdkChannelClient.fetchNotification` via the SDK
+      `NotificationClient`; receiver `exported=true`; JVM checks 94/94.)*

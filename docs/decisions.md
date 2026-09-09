@@ -178,3 +178,79 @@ always, sync-relevant INFO targets (`matrix_sdk::client`,
 DEBUG/TRACE, truncates to 400 chars, and appends into the bounded
 `DebugLog` ring buffer — so "Send log" dumps contain SDK/HTTP diagnostics
 without credentials (G7).
+
+## Chunk C (2026-09-09): real push→notification path, UnifiedPush/ntfy app side
+
+Gap before this chunk: `KaiLinkPushReceiver.onMessage` ignored the
+UnifiedPush message bytes, could not restore a session on a cold process
+(`MatrixSdkChannelClient.syncOnce()` throws `No active session` — the
+normal push case wakes a dead process), never rendered notification
+content (`rooms()` carries `lastMessage = null`, so the payload was
+always `null`), and the manifest receiver was `exported=false` — a
+distributor delivers its broadcasts as another app targeting this
+package, so with `exported=false` **no** UnifiedPush broadcast could
+ever arrive.
+
+Implementation (patterns studied from the reference corpora; **no code
+copied**, see provenance below):
+- Manifest: `KaiLinkPushReceiver` `exported=true`
+  (`tools:ignore="ExportedReceiver"`) — the connector docs
+  (`MessagingReceiver` KDoc) and Element X's
+  `libraries/pushproviders/unifiedpush/src/main/AndroidManifest.xml`
+  both require it.
+- `data/push/PushPayload` — parses the UnifiedPush message bytes. The
+  bytes are the body the homeserver POSTed to the push gateway: ntfy's
+  Matrix gateway publishes the **entire notify body** to the topic
+  (`server_matrix.go`, `newRequestFromMatrixJSON` reuses the original
+  body), i.e. `{"notification":{"event_id":…,"room_id":…,"counts":{…}}}`
+  — the same shape Element X's `UnifiedPushParser`/
+  `PushDataUnifiedPush` decode. Field scanner instead of a JSON
+  dependency (offline build); accepts the flat form defensively.
+- `data/push/PushMessageHandler` — cold-start-safe orchestrator
+  (mutex-serialized): parse → ensure session (`SessionStore.load` →
+  `ChannelClient.restore`; no session → push dropped) → `syncOnce()` →
+  notification resolution → payload. Non-Matrix payload = wake-up sync
+  only. Mirrors Element X's receiver→parser→`PushHandler` flow and its
+  "unable to retrieve session" behavior.
+- `MatrixSdkChannelClient.fetchNotification(roomId, eventId)` — the
+  pinned `sdk-android:26.09.08` ships `NotificationClient`
+  (`Client.notificationClient(NotificationProcessSetup.
+  MultipleProcesses)` — no `SyncService` needed in the push process;
+  `SingleProcess` requires one) and
+  `getNotification(roomId, eventId) → NotificationStatus`
+  (`Event(NotificationItem)` / `EventFilteredOut` / `EventNotFound` /
+  `EventRedacted`). Item → title (`roomInfo.displayName`), body
+  (`TimelineEvent.content()` → `MessageLikeEventContent.RoomMessage`
+  → `MessageType.Text/Notice/Emote` body; `RoomEncrypted` →
+  undecryptable placeholder), sender, timestamp. This is the
+  "NotificationClient wiring" open item of
+  `docs/features/f2-unifiedpush/tasks.md`. Objects are disposed
+  (`destroy()`) after mapping; the client is closed with the SDK client.
+- `PushNotificationPayload.fromRoom(rooms, roomId)` — room-targeted
+  selection: only the pushed room notifies; without a usable room ID it
+  degrades to `fromLatest` (a wrong-room notification is worse than
+  none).
+- E2E gate extension (C2c): after the proven Conduit→ntfy publish
+  (C2b), the cached ntfy `message` field IS the bytes the receiver
+  would get — `MatrixE2eTest` now parses it with `PushPayload.parse`
+  and asserts `room_id == roomId`, proving the app-side parser against
+  the real chain.
+
+Reference corpora provenance (read-only studies, exact state used):
+
+| Reference | URL | HEAD (checked out) | Last commit (UTC-offset) | License (LICENSE file) |
+| --- | --- | --- | --- | --- |
+| Element X Android | `https://github.com/element-hq/element-x-android` | `c623105da65bedc92b5783cb690add22fe0ba6e2` | 2026-09-09T18:40:16+02:00 | **AGPL-3.0** (`LICENSE`) + separate `LICENSE-COMMERCIAL` (Element commercial licensees only) |
+| UnifiedPush android-connector | `https://github.com/UnifiedPush/android-connector` | `14427332043a46eb285676c97637f8842814a686` | 2025-07-01T08:25:09+02:00 | Apache-2.0 (Copyright 2021 Simon Gougeon) |
+| ntfy Android | `https://github.com/binwiederhier/ntfy-android` | `51730a0f06cebfad59f1b7bc0cb6d5c47082b032` | 2026-07-09T22:45:41+02:00 | Apache-2.0 |
+
+Because Element X Android is **AGPL-3.0**, only its architecture and
+behavior were used as reference (receiver→parser→handler flow, payload
+shape, `NotificationClient` usage, `exported` contract); no AGPL code
+was copied into KaiLink. The UnifiedPush connector is already a binary
+dependency (`org.unifiedpush.android:connector:3.3.5`, Apache-2.0);
+ntfy-side message semantics were verified against ntfy-android's
+distributor code (`up/Distributor.sendMessage` sends the raw message
+bytes; `msg/NotificationDispatcher` → `decodeBytesMessage`) and the
+ntfy server behavior above. FCM/Google remains absent (project
+constitution); the existing E2E script was preserved unchanged.

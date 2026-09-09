@@ -26,8 +26,14 @@ import org.matrix.rustcomponents.sdk.ClientBuilder
 import org.matrix.rustcomponents.sdk.CreateRoomParameters
 import org.matrix.rustcomponents.sdk.EventOrTransactionId
 import org.matrix.rustcomponents.sdk.HttpPusherData
+import org.matrix.rustcomponents.sdk.MessageLikeEventContent
 import org.matrix.rustcomponents.sdk.MessageType
 import org.matrix.rustcomponents.sdk.MsgLikeKind
+import org.matrix.rustcomponents.sdk.NotificationClient
+import org.matrix.rustcomponents.sdk.NotificationEvent
+import org.matrix.rustcomponents.sdk.NotificationItem
+import org.matrix.rustcomponents.sdk.NotificationProcessSetup
+import org.matrix.rustcomponents.sdk.NotificationStatus
 import org.matrix.rustcomponents.sdk.PushFormat
 import org.matrix.rustcomponents.sdk.PusherIdentifiers
 import org.matrix.rustcomponents.sdk.PusherKind
@@ -42,9 +48,12 @@ import org.matrix.rustcomponents.sdk.SyncService
 import org.matrix.rustcomponents.sdk.SyncSettingsV2
 import org.matrix.rustcomponents.sdk.TaskHandle
 import org.matrix.rustcomponents.sdk.TextMessageContent
+import org.matrix.rustcomponents.sdk.TimelineEvent
+import org.matrix.rustcomponents.sdk.TimelineEventContent
 import org.matrix.rustcomponents.sdk.UploadParameters
 import org.matrix.rustcomponents.sdk.UploadSource
 import org.matrix.rustcomponents.sdk.FileInfo
+import org.box44.kailink.data.push.PushNotificationPayload
 import uniffi.matrix_sdk_crypto.CollectStrategy
 import uniffi.matrix_sdk_crypto.DecryptionSettings
 import uniffi.matrix_sdk_crypto.TrustRequirement
@@ -89,6 +98,10 @@ class MatrixSdkChannelClient(
 
     @Volatile
     private var syncService: SyncService? = null
+
+    /** SDK notification client for the push path (lazily created, closed with the client). */
+    @Volatile
+    private var notificationClient: NotificationClient? = null
 
     private val timelines = ConcurrentHashMap<String, TimelineSubscription>()
 
@@ -471,6 +484,89 @@ class MatrixSdkChannelClient(
         }
     }
 
+    /**
+     * SDK-sanctioned notification resolution for the push path
+     * (Element X pattern: `NotificationClient.getNotification(roomId,
+     * eventId)`). Returns `null` when there is no session, no ids, the
+     * event was filtered/redacted/not found, or the fetch failed — the
+     * caller ([org.box44.kailink.data.push.PushMessageHandler]) then falls
+     * back to the room list.
+     */
+    suspend fun fetchNotification(roomId: String?, eventId: String?): PushNotificationPayload? {
+        if (roomId.isNullOrBlank() || eventId.isNullOrBlank()) return null
+        val c = client ?: return null
+        val nc = obtainNotificationClient(c) ?: return null
+        val status = try {
+            nc.getNotification(roomId, eventId)
+        } catch (t: Throwable) {
+            onLog("Notification fetch failed: ${t.message}")
+            return null
+        }
+        return try {
+            when (status) {
+                is NotificationStatus.Event -> notificationPayload(status.item, roomId)
+                else -> null
+            }
+        } catch (t: Throwable) {
+            onLog("Could not map notification: ${t.message}")
+            null
+        } finally {
+            if (status is NotificationStatus.Event) runCatching { status.item.destroy() }
+            runCatching { status.destroy() }
+        }
+    }
+
+    private suspend fun obtainNotificationClient(c: Client): NotificationClient? {
+        notificationClient?.let { return it }
+        return try {
+            // MultipleProcesses: the push process has no SyncService
+            // (SingleProcess requires one) — the dedicated push-process setup.
+            c.notificationClient(NotificationProcessSetup.MultipleProcesses)
+                .also { notificationClient = it }
+        } catch (t: Throwable) {
+            onLog("NotificationClient unavailable: ${t.message}")
+            null
+        }
+    }
+
+    private fun notificationPayload(item: NotificationItem, roomId: String): PushNotificationPayload? {
+        val event = item.event as? NotificationEvent.Timeline ?: return null
+        val body = notificationBody(event.event)
+        val roomDisplayName = item.roomInfo.displayName?.takeIf { it.isNotBlank() }
+        val room = Room(
+            id = roomId,
+            displayName = roomDisplayName ?: roomId,
+            isEncrypted = item.roomInfo.isEncrypted == true,
+            lastMessage = null,
+        )
+        val message = Message(
+            id = eventIdOf(event.event) ?: "",
+            roomId = roomId,
+            sender = event.event.senderId(),
+            body = body.orEmpty(),
+            direction = MessageDirection.INCOMING,
+            state = if (body == null) DeliveryState.UNDECRYPTABLE else DeliveryState.SENT,
+            timestampMillis = event.event.timestamp().toLong(),
+        )
+        return PushNotificationPayload.from(room, message)
+    }
+
+    private fun notificationBody(event: TimelineEvent): String? = when (val content = event.content()) {
+        is TimelineEventContent.MessageLike -> when (val like = content.content) {
+            is MessageLikeEventContent.RoomMessage -> when (val type = like.messageType) {
+                is MessageType.Text -> type.content.body
+                is MessageType.Notice -> type.content.body
+                is MessageType.Emote -> type.content.body
+                else -> null
+            }
+            is MessageLikeEventContent.RoomEncrypted -> UNDECRYPTABLE_PLACEHOLDER
+            else -> null
+        }
+        else -> null
+    }
+
+    private fun eventIdOf(event: TimelineEvent): String? = runCatching { event.eventId() }.getOrNull()
+
     // ------------------------------------------------------------------ Lifecycle
 
     override suspend fun logout() {
@@ -493,6 +589,8 @@ class MatrixSdkChannelClient(
             runCatching { service.close() }
         }
         syncService = null
+        notificationClient?.let { runCatching { it.destroy() } }
+        notificationClient = null
         client?.let { runCatching { it.close() } }
         client = null
         activeSession = null

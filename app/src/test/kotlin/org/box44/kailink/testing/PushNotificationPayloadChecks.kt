@@ -77,4 +77,61 @@ fun pushNotificationPayloadChecks() {
         expectEquals(PushNotificationPayload.EMPTY_BODY_TEXT, payload.text, "empty text")
         expectNull(payload.roomId, "no room ID")
     }
+
+    Checks.check("fromRoom notifies only the pushed room (not another room)") {
+        val pushed = room(
+            "!room-a:example.org",
+            "Room A",
+            message("m1", "!room-a:example.org", "@bob:example.org", "pushed here", MessageDirection.INCOMING, 100L),
+        )
+        val other = room(
+            "!room-b:example.org",
+            "Room B",
+            message("m2", "!room-b:example.org", "@carol:example.org", "newer elsewhere", MessageDirection.INCOMING, 200L),
+        )
+
+        val payload = PushNotificationPayload.fromRoom(listOf(pushed, other), "!room-a:example.org")
+            ?: throw CheckFailure("Payload present")
+
+        expectEquals("!room-a:example.org", payload.roomId, "Pushed room")
+        expectEquals("Room A", payload.title, "Title from pushed room")
+        expectEquals("bob: pushed here", payload.text, "Preview from pushed room")
+    }
+
+    Checks.check("fromRoom falls back to fromLatest without a usable room ID") {
+        val rooms = listOf(
+            room(
+                "!room-a:example.org",
+                "Room A",
+                message("m1", "!room-a:example.org", "@bob:example.org", "hello", MessageDirection.INCOMING, 100L),
+            ),
+        )
+
+        val withoutRoomId = PushNotificationPayload.fromRoom(rooms, null)
+        expectEquals("!room-a:example.org", withoutRoomId?.roomId, "null roomId → fromLatest")
+
+        val unknownRoom = PushNotificationPayload.fromRoom(rooms, "!unknown:example.org")
+        expectEquals("!room-a:example.org", unknownRoom?.roomId, "unknown room → fromLatest")
+
+        val blank = PushNotificationPayload.fromRoom(rooms, "  ")
+        expectEquals("!room-a:example.org", blank?.roomId, "blank roomId → fromLatest")
+    }
+
+    Checks.check("fromRoom returns null for a known room without an incoming message") {
+        val outgoing = room(
+            "!room-a:example.org",
+            "Room A",
+            message("m1", "!room-a:example.org", "@alice:example.org", "from me", MessageDirection.OUTGOING, 100L),
+        )
+        val noMessage = room("!room-b:example.org", "Room B", null)
+
+        expectNull(
+            PushNotificationPayload.fromRoom(listOf(outgoing), "!room-a:example.org"),
+            "outgoing last message",
+        )
+        expectNull(
+            PushNotificationPayload.fromRoom(listOf(noMessage), "!room-b:example.org"),
+            "no last message",
+        )
+    }
 }

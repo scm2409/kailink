@@ -8,7 +8,12 @@
   present → endpoint → registration; `simulateIncomingPush()` for the
   sync path.
 - Phase 2: `UnifiedPushRegistrar` + `KaiLinkPushReceiver`
-  (BroadcastReceiver, `exported=false`) + manifest entries; since
+  (BroadcastReceiver, `exported=true`) + manifest entries; since
   2026-09-08 implemented under `app/src/main/kotlin/org/box44/kailink/
   data/push/` and wired into `AppGraph`. Only trigger/receiver were
-  swapped.
+  swapped; since 2026-09-09 (Chunk C) `onMessage` runs
+  `PushMessageHandler`: `PushPayload.parse(message.content)` →
+  cold-start session restore → `syncOnce()` → notification resolution
+  (SDK `NotificationClient` via `MatrixSdkChannelClient.
+  fetchNotification`, room-list fallback
+  `PushNotificationPayload.fromRoom`) → `PushNotifier`.

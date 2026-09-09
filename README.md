@@ -44,11 +44,11 @@ Gradle wrapper 9.1.0, AGP 8.13.2, Kotlin 2.2.21.
 ```
 
 Observed on 2026-09-09: `BUILD SUCCESSFUL`; JUnit report `tests="1"
-failures="0"` (the test runs all 63 check-group checks), check report
-under `app/build/reports/phase1-checks.txt` (63/63 passed), see
+failures="0"` (the test runs all 94 check-group checks), check report
+under `app/build/reports/phase1-checks.txt` (94/94 passed), see
 [`docs/features/verification.md`](docs/features/verification.md).
 Result: `app/build/outputs/apk/debug/app-debug.apk`
-(`org.box44.kailink`, versionName `0.2.4-phase1`, minSdk 28, targetSdk 36,
+(`org.box44.kailink`, versionName `0.2.6-phase1`, minSdk 28, targetSdk 36,
 including `libmatrix_sdk_ffi.so` from the matrix-rust-sdk).
 
 Since 0.2.4-phase1 every screen shows the version as a small footer, and the

@@ -37,6 +37,22 @@ data class PushNotificationPayload(
             return from(candidate, message)
         }
 
+        /**
+         * Room-targeted selection for the push path: when the push names a
+         * room ([PushPayload.roomId]), only that room notifies (never a
+         * different room — wrong-room notifications are worse than none).
+         * Without a room ID, or if the named room is unknown, this falls
+         * back to [fromLatest]; a named room whose last message is not
+         * incoming yields `null`.
+         */
+        fun fromRoom(rooms: List<Room>, roomId: String?): PushNotificationPayload? {
+            val target = roomId?.takeIf { it.isNotBlank() } ?: return fromLatest(rooms)
+            val room = rooms.firstOrNull { it.id == target } ?: return fromLatest(rooms)
+            val message = room.lastMessage ?: return null
+            if (message.direction != MessageDirection.INCOMING) return null
+            return from(room, message)
+        }
+
         /** Payload from room and message (preview: "sender: text"). */
         fun from(room: Room?, message: Message): PushNotificationPayload {
             val title = room?.displayName?.takeIf { it.isNotBlank() }
