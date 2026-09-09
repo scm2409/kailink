@@ -58,7 +58,7 @@ printf '%s\n' \
   '    }' \
   '}' > "$NGINX_CONF"
 podman run -d --name kailink-e2e-conduit --network "$NETWORK" -e CONDUIT_CONFIG=/etc/conduit.toml -v "$CONFIG_FILE:/etc/conduit.toml:ro" -p "$CONDUIT_PORT:6167" "$CONDUIT_IMAGE" >/dev/null
-podman run -d --name kailink-e2e-ntfy --network "$NETWORK" -p "$NTFY_PORT:80" "$NTFY_IMAGE" serve >/dev/null
+podman run -d --name kailink-e2e-ntfy --network "$NETWORK" -p "$NTFY_PORT:80" "$NTFY_IMAGE" serve --base-url "http://127.0.0.1:$NTFY_PORT" >/dev/null
 podman run -d --name kailink-e2e-tls --network "$NETWORK" -v "$CERT_DIR/server.crt:/etc/nginx/certs/server.crt:ro" -v "$CERT_DIR/server.key:/etc/nginx/certs/server.key:ro" -v "$NGINX_CONF:/etc/nginx/conf.d/default.conf:ro" -p "$TLS_PORT:8443" "$NGINX_IMAGE" >/dev/null
 READY=false
 for _ in $(seq 1 60); do
@@ -98,6 +98,7 @@ echo "[6/6] Two-account E2E (Chunk A + Chunk B + restore leg) + TLS path test"
   -e debug false \
   -e class 'org.box44.kailink.MatrixE2eTest#twoAccountTimelineDeliveryUnencrypted,org.box44.kailink.TlsE2eTest#rustlsLoginOverHttpsFailsWithTlsErrorNotInitPanic' \
   -e e2e.homeserver http://127.0.0.1:6167 \
+  -e e2e.pusher_gateway http://kailink-e2e-ntfy \
   -e e2e.tls_homeserver "https://127.0.0.1:$TLS_PORT" \
   -e e2e.alice.username "$ALICE_USER" -e e2e.alice.password "$ALICE_PASS" \
   -e e2e.bob.username "$BOB_USER" -e e2e.bob.password "$BOB_PASS" \
