@@ -103,6 +103,12 @@ Phase-2-Verdrahtung ist kompiliert und im Debug-APK enthalten; ein Laufzeit-
 nachweis steht aus. `InMemoryChannelClient` und `SimulatedPushTrigger`
 bleiben als JVM-geprüfte Referenz im Baum (Tests nutzen sie weiterhin).
 
+## Emulator-E2E (Chunk A+B)
+
+**Beobachtet am 2026-09-09:** Der Emulator-E2E-Stand mit Chunk A (zwei
+Konten, unverschlüsselt) und Chunk B (verschlüsselte zweite Leg) ist
+grün. `scripts/emulator-e2e.sh` reproduziert den Lauf in einem Befehl.
+
 ## Matrix der Verifikationsstufen (aus project-constitution.md)
 
 | Stufe | Mittel | Diese Umgebung |

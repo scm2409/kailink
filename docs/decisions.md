@@ -25,6 +25,7 @@
   Namespace `uniffi.matrix_sdk_crypto`; die optionale Testkonfiguration setzt
   `CollectStrategy.ALL_DEVICES` und `DecryptionSettings(TrustRequirement.UNTRUSTED)`.
   Cross-Signing und Key-Backup werden nicht getestet oder behauptet.
+  Commit: `8db4c4e` (Chunk B, verschlüsselte zweite Leg).
 
 - UniFFI-Builder sind immutable (Quelle:
   `bindings/matrix-sdk-ffi/src/client_builder.rs` im matrix-rust-sdk —
@@ -34,6 +35,7 @@
   (`ClientBuildError: ... must be called`). Fix: Rueckgaben verketten
   (`builder = builder.homeserverUrl(...)` etc.). Der Login-Pfad
   funktionierte zuvor nie, daher keine Nutzerverhaltensänderung.
+  Commit: `d9d4190`.
 - Cleartext nur in `emulatorDebug`: `network_security_config.xml`
   (`cleartextTrafficPermitted=true` nur fuer `10.0.2.2`, `127.0.0.1`,
   `localhost`, `192.168.42.20`) + Manifest-Overlay mit
@@ -44,3 +46,4 @@
 - Conduit-Grenzen: kein Sliding Sync (`VersionIsMissing` bei
   `syncService().finish()`) — E2E nutzt `syncOnce`; Emulator-Netz defekt
   (`10.0.2.2` unerreichbar) — Lauf nutzt `adb reverse` nach `127.0.0.1`.
+  Commit: `919de4c` (C2b-Beweis: Conduit→ntfy-Zustellung).
