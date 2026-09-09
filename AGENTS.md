@@ -23,6 +23,13 @@
 - Permission allowlist: `/home/dev/.config/opencode/opencode.jsonc` (edit/bash permissions and `external_directory` records for SDK/toolchain paths).
 - If a needed external path is blocked, add a record there rather than working around it.
 
+## Library docs
+- Context7 pinned IDs: Jetpack Compose `/websites/developer_android_develop_ui_compose`, Gradle `/gradle/gradle`, matrix-rust-sdk `matrix-org/matrix-rust-sdk`.
+- Use a pinned ID directly; call `resolve-library-id` only when the ID is unknown, to save quota.
+- Use DeepWiki for repository questions — it is free and does not consume Context7 quota.
+- Built-in websearch is available when `OPENCODE_ENABLE_EXA=1`.
+- Project-specific operational knowledge belongs in this file; skills are only for project-wide recipes.
+
 ## Hard Rules
 - Never weaken gate checks or test assertions.
 - Never edit `local.properties`.
