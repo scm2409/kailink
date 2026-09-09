@@ -1,23 +1,23 @@
 package org.box44.kailink.domain.push
 
-/** Zustand der UnifiedPush-Registrierung (für die UI-Anzeige). */
+/** State of the UnifiedPush registration (for UI display). */
 enum class PushState {
-    /** Kein UnifiedPush-Distributor installiert. */
+    /** No UnifiedPush distributor installed. */
     NOT_AVAILABLE,
 
-    /** Distributor vorhanden, Registrierung läuft. */
+    /** Distributor available, registration in progress. */
     READY,
 
-    /** Endpoint empfangen und als Matrix-Pusher angemeldet. */
+    /** Endpoint received and registered as a Matrix pusher. */
     REGISTERED,
 
-    /** Registrierung fehlgeschlagen. */
+    /** Registration failed. */
     FAILED,
 }
 
 /**
- * Nahtstelle zum Anstoßen der Push-Registrierung, ohne Android-Typen in der
- * UI-Schicht (Implementierung: `UnifiedPushRegistrar`).
+ * Seam for triggering push registration without Android types in the
+ * UI layer (implementation: `UnifiedPushRegistrar`).
  */
 interface PushRegistrationTrigger {
     fun tryRegister()

@@ -1,147 +1,147 @@
-# Architektur
+# Architecture
 
-## 1. Interaktionsmodell (Phase-1-Szenario)
+## 1. Interaction model (Phase-1 scenario)
 
-1. Nutzer:in öffnet KaiLink → Anmeldeoberfläche (Homeserver-URL, Konto, Passwort).
-2. Nach erfolgreichem Login: Raumliste; verschlüsselte Räume sind gekennzeichnet.
-3. Öffnen eines Raums → Chronik (Timeline); Nachrichten senden über Textfeld.
-4. Push-Kette: Zustandsanzeige (Distributor → Endpoint → registriert); ein
-   simulierter eingehender Push stößt einen Sync an.
-5. Sprachein-/ausgabe sind bewusst **nicht** interaktiv implementiert; die
-   Nahtstellen existieren und sind dokumentiert (siehe
+1. The user opens KaiLink → login screen (homeserver URL, account, password).
+2. After a successful login: room list; encrypted rooms are marked.
+3. Opening a room → timeline; messages are sent via a text field.
+4. Push chain: state display (distributor → endpoint → registered); a
+   simulated incoming push triggers a sync.
+5. Speech input/output are deliberately **not** implemented interactively; the
+   seams exist and are documented (see
    [`features/sprache.md`](features/sprache.md)).
 
-In Phase 1 läuft der Kanaldienst als In-Memory-Simulation — es werden **keine
-Netzwerkverbindungen** aufgebaut. Sämtliche Schnittstellen entsprechen bereits
-der Phase-2-Geometrie.
+In Phase 1 the channel service runs as an in-memory simulation — **no
+network connections** are established. All interfaces already correspond to
+the Phase-2 geometry.
 
-## 2. Schichten
+## 2. Layers
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│ ui/  (Framework-Views + ViewModels, StateFlow)       │  ← kennt nur domain
+│ ui/  (framework views + ViewModels, StateFlow)       │  ← knows only domain
 ├──────────────────────────────────────────────────────┤
 │ domain/  (Session, Room, Message, ChannelClient,     │
 │          SessionStore, TimelineReducer,              │
-│          Push-Nahtstellen, Speech-Nahtstellen)       │  ← reines Kotlin, JVM-testbar
+│          push seams, speech seams)                   │  ← pure Kotlin, JVM-testable
 ├──────────────────────────────────────────────────────┤
 │ data/  (InMemoryChannelClient, FileSessionStore,     │
-│         PushController, SimulatedPushTrigger)        │  ← Android nur am Rand
+│         PushController, SimulatedPushTrigger)        │  ← Android only at the edge
 ├──────────────────────────────────────────────────────┤
 │ Phase 2: MatrixSdkChannelClient (matrix-rust-sdk),   │
-│          UnifiedPush-Connector + Receiver, Compose   │
+│          UnifiedPush connector + receiver, Compose   │
 └──────────────────────────────────────────────────────┘
 ```
 
-- **Abhängigkeitsregel:** Pfeile zeigen nur nach unten. `ui` und `domain`
-  kennen keine Android- und keine Kanal-SDK-Typen; `data` übersetzt
-  kanalseitige Zustände in Domänenereignisse (`ChannelEvent`) bzw.
-  Chronik-Patches (`TimelinePatch`).
-- **Verdrahtung:** `KaiLinkApp` erzeugt `AppGraph` (manuelle DI, kein
-  Hilt/Dagger — bewusst, um die Kompilierungsfläche des PoC klein zu halten).
-- **ViewModels** sind reine Kotlin-Klassen mit injizierbarem
-  `CoroutineScope` und `StateFlow<UiState>` — dadurch JVM-testbar und ohne
-  AndroidX-Lifecycle-Abhängigkeit.
+- **Dependency rule:** arrows point only downward. `ui` and `domain`
+  know no Android and no channel SDK types; `data` translates
+  channel-side states into domain events (`ChannelEvent`) and
+  timeline patches (`TimelinePatch`).
+- **Wiring:** `KaiLinkApp` creates `AppGraph` (manual DI, no
+  Hilt/Dagger — deliberate, to keep the PoC's compilation surface small).
+- **ViewModels** are pure Kotlin classes with an injectable
+  `CoroutineScope` and `StateFlow<UiState>` — therefore JVM-testable and without
+  an AndroidX Lifecycle dependency.
 
-## 3. Datenfluss (Phase 1)
+## 3. Data flow (Phase 1)
 
 ```
-UI-Aktion (Button/Textfeld)
+UI action (button/text field)
    → ViewModel (StateFlow<UiState>)
    → ChannelClient (InMemoryChannelClient)
    → ChannelEvent (RoomsUpdated | TimelineUpdated | SyncStateChanged | ClientError) ── SharedFlow
-   → ViewModel aktualisiert UiState
-   → Activity rendert (Adapter/TextViews)
+   → ViewModel updates UiState
+   → Activity renders (adapters/TextViews)
 ```
 
-Senden: `TimelineViewModel.send()` → `ChannelClient.sendMessage()` →
-Ablage im In-Memory-Speicher + `TimelineUpdated`-Ereignis → Chronik rendert
-die ausgehende Nachricht.
+Sending: `TimelineViewModel.send()` → `ChannelClient.sendMessage()` →
+stored in the in-memory store + `TimelineUpdated` event → the timeline renders
+the outgoing message.
 
-Chronik-Patches: `TimelineReducer.apply(messages, patches)` bleibt die reine
-Domänenfunktion; Phase 2 füttert sie mit SDK-`TimelineDiff`-Übersetzungen,
-Phase 1 demonstriert sie über die JVM-Prüfungen.
+Timeline patches: `TimelineReducer.apply(messages, patches)` remains the pure
+domain function; Phase 2 feeds it with translations of SDK `TimelineDiff`s,
+Phase 1 demonstrates it via the JVM checks.
 
-## 4. Push-Kette (ohne Google)
+## 4. Push chain (without Google)
 
 ```
-Phase 1 (Simulation):                Phase 2 (echt):
-SimulatedPushTrigger                 UnifiedPush-Distributor (z. B. ntfy)
-   │  tryRegister()                     │  Broadcast (Connector-Aktionen)
-   ▼                                    ▼
+Phase 1 (simulation):                 Phase 2 (real):
+SimulatedPushTrigger                  UnifiedPush distributor (e.g. ntfy)
+   │  tryRegister()                      │  broadcasts (connector actions)
+   ▼                                     ▼
 PushController  ──▶ ① onNewEndpoint → ChannelClient.registerPushEndpoint(url)
                 ──▶ ② onMessage()    → ChannelClient.syncOnce()
    │
-   └─ StateFlow<PushState> → Raumliste ("Push: registriert (UnifiedPush-Simulator)")
+   └─ StateFlow<PushState> → room list ("Push: registered (UnifiedPush)")
 ```
 
-- Der Zustandsautomat (`PushController`) ist identisch in beiden Phasen und
-  JVM-getestet (`pushControllerChecks`, `pushChainChecks`).
-- Phase 1 simuliert Distributor, Endpoint und Push-Zustellung lokal
-  (`SimulatedPushTrigger`); kein Benachrichtigungs-Rendering (dokumentierte
-  PoC-Grenze, siehe [`features/push.md`](features/push.md)).
+- The state machine (`PushController`) is identical in both phases and
+  JVM-tested (`pushControllerChecks`, `pushChainChecks`).
+- Phase 1 simulates distributor, endpoint, and push delivery locally
+  (`SimulatedPushTrigger`); no notification rendering (documented
+  PoC limit, see [`features/push.md`](features/push.md)).
 
-## 5. Persistenz
+## 5. Persistence
 
-- **Domänensitzung:** `FileSessionStore` (`session.properties`,
-  `java.util.Properties`) im App-Files-Verzeichnis. Phase-1-bewusst
-  unverschlüsselt auf dem Gerät; für Produktion: EncryptedFile/Keystore
-  (offen, siehe verification.md).
-- **Krypto-Store (Phase 2):** SQLite über das Rust-SDK in
-  `context.filesDir/matrix/store` — überlebt Neustarts (Voraussetzung E2EE).
+- **Domain session:** `FileSessionStore` (`session.properties`,
+  `java.util.Properties`) in the app files directory. Deliberately Phase-1
+  unencrypted on the device; for production: EncryptedFile/Keystore
+  (open, see verification.md).
+- **Crypto store (Phase 2):** SQLite via the Rust SDK in
+  `context.filesDir/matrix/store` — survives restarts (prerequisite for E2EE).
 
-## 6. Verifizierte Abhängigkeiten
+## 6. Verified dependencies
 
-**Phase-1-Stand (Offline, 2026-09-08):** Gradle 9.1.0, AGP 8.13.2,
+**Phase-1 state (offline, 2026-09-08):** Gradle 9.1.0, AGP 8.13.2,
 Kotlin 2.2.21, kotlinx-coroutines-android 1.7.3, Android platform 36,
-build-tools 35.0.0 — alle im lokalen Gradle-Cache vorhanden und durch einen
-erfolgreichen Offline-Build belegt (G3/G8; Details in
+build-tools 35.0.0 — all present in the local Gradle cache and evidenced by a
+successful offline build (G3/G8; details in
 [`features/verification.md`](features/verification.md)).
 
-**Phase-2-Stand (online, 2026-09-08):** zusätzlich eingebunden und durch
-`./gradlew testDebugUnitTest assembleDebug` (BUILD SUCCESSFUL) belegt:
+**Phase-2 state (online, 2026-09-08):** additionally integrated and evidenced by
+`./gradlew testDebugUnitTest assembleDebug` (BUILD SUCCESSFUL):
 
-| Artefakt | Version | Rolle |
+| Artifact | Version | Role |
 | --- | --- | --- |
-| org.matrix.rustcomponents:sdk-android | 26.09.08 | echter Matrix-Kanal (`MatrixSdkChannelClient`), Rust-`libmatrix_sdk_ffi.so` im APK |
-| org.unifiedpush.android:connector | 3.3.5 | UnifiedPush-Registrierung + Receiver |
-| junit:junit | 4.13.2 | JVM-Prüfungen als gewöhnliche JUnit-Aufgabe |
-| kotlinx-coroutines-test | 1.7.3 | Test-Klassepfad |
+| org.matrix.rustcomponents:sdk-android | 26.09.08 | real Matrix channel (`MatrixSdkChannelClient`), Rust `libmatrix_sdk_ffi.so` in the APK |
+| org.unifiedpush.android:connector | 3.3.5 | UnifiedPush registration + receiver |
+| junit:junit | 4.13.2 | JVM checks as an ordinary JUnit task |
+| kotlinx-coroutines-test | 1.7.3 | test classpath |
 
-Weiterhin nicht enthalten: Jetpack Compose (Screens bleiben Framework-Views;
-ViewModels sind davon unberührt).
+Still not included: Jetpack Compose (screens remain framework views;
+ViewModels are unaffected).
 
-## 7. Bewusste PoC-Grenzen (Stand 2026-09-08)
+## 7. Deliberate PoC limits (as of 2026-09-08)
 
-1. ~~Kanaldienst ist eine In-Memory-Simulation~~ — seit Phase 2 verdrahtet
-   `AppGraph` den echten `MatrixSdkChannelClient`; die In-Memory-Variante
-   bleibt als JVM-Referenz für Prüfungen erhalten. Laufzeit gegen einen
-   echten Homeserver ist noch nicht beobachtet (kein Gerät/Zugang).
-2. E2EE: SQLite-Krypto-Store ist konfiguriert, UTD-Erkennung im Adapter
-   vorhanden; vollständige Verifizierung (Geräte, Verifizierungsabläufe)
-   offen (siehe [`features/nachrichten-e2ee.md`](features/nachrichten-e2ee.md)).
-3. Persistenz der Domänensitzung ohne Android-Keystore.
-4. Push: UnifiedPush-Registrar/Receiver sind verdrahtet; Benachrichtigungen
-   werden nicht gerendert; Laufzeit gegen echten Distributor nicht beobachtet.
-5. Kein Hintergrund-Dienst (WorkManager) — Sync im Vordergrund bzw. per
-   Push ausgelöst.
-6. Mehrere installierte UnifiedPush-Distributoren ohne Nutzerwahl: der
-   Registrar wählt deterministisch den ersten gemeldeten (dokumentierte
-   Grenze).
-7. Sprach-Nahtstellen haben nur No-Op-Implementierungen.
+1. ~~The channel service is an in-memory simulation~~ — since Phase 2
+   `AppGraph` wires the real `MatrixSdkChannelClient`; the in-memory variant
+   remains as a JVM reference for checks. Runtime against a
+   real homeserver has not yet been observed (no device/access).
+2. E2EE: the SQLite crypto store is configured, UTD detection in the adapter
+   exists; full verification (devices, verification flows) is
+   open (see [`features/nachrichten-e2ee.md`](features/nachrichten-e2ee.md)).
+3. Persistence of the domain session without the Android Keystore.
+4. Push: the UnifiedPush registrar/receiver are wired; notifications
+   are not rendered; runtime against a real distributor not observed.
+5. No background service (WorkManager) — sync in the foreground or triggered
+   via push.
+6. Several installed UnifiedPush distributors without user choice: the
+   registrar deterministically picks the first reported one (documented
+   limit).
+7. The speech seams have only no-op implementations.
 
-## 8. Migrationspfad Phase 2
+## 8. Migration path Phase 2
 
-1. `InMemoryChannelClient` → `MatrixSdkChannelClient`; `AppGraph` ist die
-   einzige Änderungsstelle. *(erledigt 2026-09-08, inkl. Umzug der Pakete
-   nach `org.box44.kailink`)*
+1. `InMemoryChannelClient` → `MatrixSdkChannelClient`; `AppGraph` is the
+   only change site. *(done 2026-09-08, including moving the packages
+   to `org.box44.kailink`)*
 2. `SimulatedPushTrigger` → `UnifiedPushRegistrar` + `KaiLinkPushReceiver`
-   (Manifest-Receiver-Einträge wieder aufnehmen). *(erledigt 2026-09-08)*
-3. Framework-Views → Jetpack Compose (Screens 1:1 auf `@Composable` abbilden;
-   ViewModels bleiben unverändert). *(offen)*
-4. JUnit 4/5 + `kotlinx-coroutines-test` einbinden und die Prüfungen von
-   `phase1Checks` auf reguläre `testDebugUnitTest`-Tests umstellen.
-   *(erledigt 2026-09-08: JUnit 4, `AllChecksTest`)*
-5. `INTERNET`-Nutzung: echte Homeserver-Kommunikation; `POST_NOTIFICATIONS`
-   für Push-Benachrichtigungen. *(offen; `INTERNET` ist deklariert,
-   Laufzeitnachweis steht aus)*
+   (re-add the manifest receiver entries). *(done 2026-09-08)*
+3. Framework views → Jetpack Compose (map the screens 1:1 onto `@Composable`;
+   ViewModels remain unchanged). *(open)*
+4. Integrate JUnit 4/5 + `kotlinx-coroutines-test` and move the checks from
+   `phase1Checks` to regular `testDebugUnitTest` tests.
+   *(done 2026-09-08: JUnit 4, `AllChecksTest`)*
+5. `INTERNET` usage: real homeserver communication; `POST_NOTIFICATIONS`
+   for push notifications. *(open; `INTERNET` is declared,
+   runtime proof still pending)*

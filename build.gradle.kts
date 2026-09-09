@@ -1,6 +1,6 @@
-// AGP über buildscript-classpath (statt Plugin-Marker): der Marker-Artefakt
-// für com.android.library ist im Offline-Cache nicht vorhanden, das eigentliche
-// AGP-Jar (com.android.tools.build:gradle:8.13.2) schon.
+// AGP via buildscript classpath (instead of the plugin marker): the marker artifact
+// for com.android.library is not present in the offline cache, but the actual
+// AGP jar (com.android.tools.build:gradle:8.13.2) is.
 buildscript {
     dependencies {
         classpath("com.android.tools.build:gradle:8.13.2")

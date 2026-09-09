@@ -22,7 +22,7 @@ val TEST_SESSION = Session(
 
 val TEST_ROOM = Room(
     id = "!room1:example.org",
-    displayName = "Testraum",
+    displayName = "Test room",
     isEncrypted = true,
     lastMessage = null,
 )
@@ -31,15 +31,15 @@ fun testMessage(id: String, roomId: String = TEST_ROOM.id): Message = Message(
     id = id,
     roomId = roomId,
     sender = "@bob:example.org",
-    body = "hallo-$id",
+    body = "hello-$id",
     direction = MessageDirection.INCOMING,
     state = DeliveryState.SENT,
     timestampMillis = 42L,
 )
 
 /**
- * Fake-Implementierung für JVM-Prüfungen: zählt Aufrufe und erlaubt es,
- * Domänenereignisse manuell zu emittieren.
+ * Fake implementation for JVM checks: counts calls and allows emitting
+ * domain events manually.
  */
 class FakeChannelClient : ChannelClient {
 

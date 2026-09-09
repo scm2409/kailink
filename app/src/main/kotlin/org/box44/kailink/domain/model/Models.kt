@@ -1,8 +1,8 @@
 package org.box44.kailink.domain.model
 
 /**
- * Persistente Matrix-Sitzung (Domänenmodell).
- * Die 1:1-Übersetzung zur SDK-Session passiert im Adapter (data/matrix).
+ * Persistent Matrix session (domain model).
+ * The 1:1 translation to the SDK session happens in the adapter (data/matrix).
  */
 data class Session(
     val userId: String,
@@ -12,7 +12,7 @@ data class Session(
     val refreshToken: String?,
 )
 
-/** Zusammenfassung eines Raums für die Raumliste. */
+/** Summary of a room for the room list. */
 data class Room(
     val id: String,
     val displayName: String,
@@ -20,21 +20,21 @@ data class Room(
     val lastMessage: Message?,
 )
 
-/** Richtung einer Nachricht relativ zur eigenen Sitzung. */
+/** Direction of a message relative to the own session. */
 enum class MessageDirection { INCOMING, OUTGOING }
 
-/** Zustand einer Nachricht aus App-Sicht. */
+/** State of a message from the app's point of view. */
 enum class DeliveryState {
-    /** erfolgreich gesendet bzw. empfangen */
+    /** successfully sent or received */
     SENT,
 
-    /** empfangen, aber nicht entschlüsselbar (E2EE) */
+    /** received but not decryptable (E2EE) */
     UNDECRYPTABLE,
 }
 
-/** Eine Chronik-Nachricht in Domänendarstellung. */
+/** A timeline message in domain representation. */
 data class Message(
-    /** Ereignis- oder Transaktions-ID (lokal stabiler Identifikator) */
+    /** Event or transaction ID (locally stable identifier) */
     val id: String,
     val roomId: String,
     val sender: String,

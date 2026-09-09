@@ -14,25 +14,25 @@ import org.matrix.rustcomponents.sdk.SyncSettingsV2
 import org.matrix.rustcomponents.sdk.TextMessageContent
 
 /**
- * Roher SDK-Client für Bob (Gegenstelle im Zwei-Konten-E2E-Test).
+ * Raw SDK client for Bob (counterpart in the two-account E2E test).
  *
- * Bob läuft bewusst NICHT über [org.box44.kailink.data.matrix.MatrixSdkChannelClient],
- * sondern direkt gegen matrix-rust-sdk — so testet der E2E-Test wirklich zwei
- * unabhängige Clients (SUT = Alice über den Adapter, Gegenstelle = Bob roh).
+ * Bob deliberately does NOT run through [org.box44.kailink.data.matrix.MatrixSdkChannelClient]
+ * but directly against matrix-rust-sdk — this way the E2E test really tests two
+ * independent clients (SUT = Alice via the adapter, counterpart = Bob raw).
  *
- * UniFFI-Konvention (sdk-android 26.09.08, per javap gegen classes.jar verifiziert):
- * Jede Rust-`async fn` erscheint als Kotlin-`suspend fun`
- * (`Continuation`-Parameter im Bytecode). Konkret suspend:
+ * UniFFI convention (sdk-android 26.09.08, verified with javap against classes.jar):
+ * Every Rust `async fn` appears as a Kotlin `suspend fun`
+ * (`Continuation` parameter in the bytecode). Concretely suspend:
  * `ClientBuilder.build`, `Client.login`, `Client.syncOnceV2`,
  * `Client.createRoom`, `Client.joinRoomById`, `Room.timeline`,
  * `Encryption.waitForE2eeInitializationTasks`, `Timeline.send`.
- * Synchron: `ClientBuilder.homeserverUrl/sqliteStore/...` — immutable
- * (Rust: self: Arc<Self> -> Arc<Self>), Rueckgaben VERKETTEN, sonst geht die
- * Config verloren (belegt durch ClientBuildError ohne homeserver_url).
- * Synchron weiter: `Client.rooms/getRoom/session/encryption`,
- * `Timeline.createMessageContent`, `SyncSettingsV2()`-Konstruktor.
- * Hinweis: `client.syncService().finish()` braucht Sliding Sync auf dem
- * Server (Conduit: VersionIsMissing) — im E2E gegen Conduit daher syncOnce.
+ * Synchronous: `ClientBuilder.homeserverUrl/sqliteStore/...` — immutable
+ * (Rust: self: Arc<Self> -> Arc<Self>), CHAIN the return values, otherwise the
+ * config is lost (proven by ClientBuildError without homeserver_url).
+ * Also synchronous: `Client.rooms/getRoom/session/encryption`,
+ * `Timeline.createMessageContent`, `SyncSettingsV2()` constructor.
+ * Note: `client.syncService().finish()` needs sliding sync on the
+ * server (Conduit: VersionIsMissing) — therefore syncOnce in the E2E against Conduit.
  */
 class RawBobClient private constructor(
     val client: Client,
@@ -50,7 +50,7 @@ class RawBobClient private constructor(
         val timeline = room.timeline()
         try {
             timeline.send(timeline.createMessageContent(MessageType.Text(TextMessageContent(body, null)))!!)
-            // Upload der Queue: syncOnce (syncOnceV2) nach dem Senden.
+            // Queue upload: syncOnce (syncOnceV2) after sending.
         } finally {
             runCatching { timeline.close() }
         }
@@ -77,8 +77,8 @@ class RawBobClient private constructor(
             val state = File(root, "bob-state").apply { mkdirs() }
             val cache = File(root, "bob-cache").apply { mkdirs() }
             val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            // UniFFI-Builder sind immutable (self: Arc<Self> -> Arc<Self>):
-            // Setter-Rueckgaben verketten, sonst geht die Config verloren.
+            // UniFFI builders are immutable (self: Arc<Self> -> Arc<Self>):
+            // chain the setter return values, otherwise the config is lost.
             val client = ClientBuilder()
                 .homeserverUrl(homeserverUrl)
                 .sqliteStore(

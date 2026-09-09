@@ -1,14 +1,14 @@
 # f2-unifiedpush – requirements.md
 
-Anforderungen an die Push-Kette ohne Google/FCM (Phase 1: Zustandskette
-echt, Distributor simuliert; Phase 2: UnifiedPush-Connector).
+Requirements for the push chain without Google/FCM (Phase 1: state chain
+real, distributor simulated; Phase 2: UnifiedPush connector).
 
-1. Kein FCM, keine Play Services (G1).
-2. Zustandsanzeige in der Raumliste: kein Distributor / Registrierung läuft /
-   registriert / fehlgeschlagen (deutsch).
-3. Endpoint-Zustellung → Registrierung als Pusher am Kanal
+1. No FCM, no Play Services (G1).
+2. State display in the room list: no distributor / registration running /
+   registered / failed (in English).
+3. Endpoint delivery → registration as a pusher at the channel
    (`ChannelClient.registerPushEndpoint`).
-4. Eingehender Push → `syncOnce()` (Aufwecken + Sync, kein
-   Benachrichtigungs-Rendering).
-5. Registrierungsverlust/Temp-Unavailable führen in einen definierten
-   Zustand; die App bleibt ohne Push voll nutzbar.
+4. Incoming push → `syncOnce()` (wake up + sync, no
+   notification rendering).
+5. Loss of registration/temp-unavailable lead into a defined
+   state; the app remains fully usable without push.

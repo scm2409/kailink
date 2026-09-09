@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Push-Benachrichtigungen (API 33+; Laufzeitfreigabe durch Nutzer:in). -->
+    <!-- Push notifications (API 33+; runtime grant by the user). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -22,7 +22,7 @@
             </intent-filter>
         </activity>
 
-        <!-- UnifiedPush-Kette: Connector-Broadcasts → PushController (docs/features/push.md) -->
+        <!-- UnifiedPush chain: connector broadcasts → PushController (docs/features/push.md) -->
         <receiver
             android:name=".data.push.KaiLinkPushReceiver"
             android:enabled="true"

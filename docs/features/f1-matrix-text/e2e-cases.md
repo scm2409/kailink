@@ -1,14 +1,14 @@
 # f1-matrix-text – e2e-cases.md
 
-Gerätefälle (Details/Erwartungen: `docs/manualtest-protokoll.md`):
+Device cases (details/expectations: `docs/manualtest-protokoll.md`):
 
-- MT-1 Anmeldung inkl. Fehlerpfad leere Felder und Erfolgspfad.
-- MT-2 Sitzungswiederherstellung nach Neustart; Abbruchfall beschädigte
-  Sitzungsdatei.
-- MT-3 Raumliste öffnen, 🔒-Badge, Chronik-Konsistenz bei erneutem Öffnen.
-- MT-4 Senden (Sprechblase, Feld geleert, Vorschau in der Raumliste,
-  Leerfeld-Schutz).
-- MT-5 Aktualisieren/Live-Sync-Ereignis ohne Fehler.
-- MT-8 Flugmodus: identisches Verhalten (Phase 1 ohne Netz).
+- MT-1 Login incl. the empty-fields failure path and the success path.
+- MT-2 Session restoration after restart; abort case of a damaged
+  session file.
+- MT-3 Open room list, 🔒 badge, timeline consistency when reopened.
+- MT-4 Sending (bubble, field cleared, preview in the room list,
+  empty-field protection).
+- MT-5 Refresh/live sync event without errors.
+- MT-8 Airplane mode: identical behavior (Phase 1 without network).
 
-Status: **nicht beobachtet** (kein Gerät in dieser Umgebung).
+Status: **not observed** (no device in this environment).

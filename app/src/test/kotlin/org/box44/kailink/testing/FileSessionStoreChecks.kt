@@ -14,36 +14,36 @@ fun fileSessionStoreChecks() {
         refreshToken = "refresh-456",
     )
 
-    Checks.check("Speichern und Laden ergibt dieselbe Sitzung") {
+    Checks.check("Save and load yields the same session") {
         val root = Files.createTempDirectory("kailink-checks").toFile()
         val store = FileSessionStore(File(root, "kailink/session.properties"))
         store.save(session)
-        expectEquals(session, store.load(), "Round-Trip")
+        expectEquals(session, store.load(), "Round trip")
         root.deleteRecursively()
     }
 
-    Checks.check("Laden ohne Datei ergibt null") {
+    Checks.check("Load without a file yields null") {
         val root = Files.createTempDirectory("kailink-checks").toFile()
-        val store = FileSessionStore(File(root, "nicht/vorhanden/session.properties"))
-        expectNull(store.load(), "Fehlende Datei")
+        val store = FileSessionStore(File(root, "does/not/exist/session.properties"))
+        expectNull(store.load(), "Missing file")
         root.deleteRecursively()
     }
 
-    Checks.check("Clear entfernt die Sitzung") {
+    Checks.check("Clear removes the session") {
         val root = Files.createTempDirectory("kailink-checks").toFile()
         val store = FileSessionStore(File(root, "session.properties"))
         store.save(session)
         store.clear()
-        expectNull(store.load(), "Nach clear()")
+        expectNull(store.load(), "After clear()")
         root.deleteRecursively()
     }
 
-    Checks.check("Refresh-Token darf fehlen") {
+    Checks.check("Refresh token may be absent") {
         val root = Files.createTempDirectory("kailink-checks").toFile()
         val withoutRefresh = session.copy(refreshToken = null)
         val store = FileSessionStore(File(root, "session.properties"))
         store.save(withoutRefresh)
-        expectEquals(withoutRefresh, store.load(), "Round-Trip ohne Refresh-Token")
+        expectEquals(withoutRefresh, store.load(), "Round trip without refresh token")
         root.deleteRecursively()
     }
 }

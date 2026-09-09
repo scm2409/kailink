@@ -26,11 +26,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Zwei-Konten-E2E-Test (Chunk A, unverschlüsselt):
- * Alice = SUT über [MatrixSdkChannelClient], Bob = roher SDK-Client
- * ([RawBobClient]). Bob sendet, Alice muss die Nachricht per Timeline-Polling
- * empfangen; danach Restore-Leg (dispose → restore aus FileSessionStore →
- * rooms() enthält den Raum).
+ * Two-account E2E test (Chunk A, unencrypted):
+ * Alice = SUT via [MatrixSdkChannelClient], Bob = raw SDK client
+ * ([RawBobClient]). Bob sends, Alice must receive the message via timeline
+ * polling; afterwards the restore leg (dispose → restore from FileSessionStore →
+ * rooms() contains the room).
  */
 @RunWith(AndroidJUnit4::class)
 class MatrixE2eTest {
@@ -72,49 +72,49 @@ class MatrixE2eTest {
             )
             aliceClient = alice
             val aliceSession = alice.login(homeserver, aliceCreds.username, aliceCreds.password)
-            harness.report("Alice angemeldet: ${aliceSession.userId}")
+            harness.report("Alice signed in: ${aliceSession.userId}")
 
-            // 2. Bob = roher SDK-Client. KEIN Live-Sync: der SyncService
-            // braucht Sliding Sync (Conduit: VersionIsMissing); Senden und
-            // Empfangen laufen hier ueber syncOnce (syncOnceV2).
+            // 2. Bob = raw SDK client. NO live sync: the SyncService
+            // needs sliding sync (Conduit: VersionIsMissing); sending and
+            // receiving run here via syncOnce (syncOnceV2).
             val bob = RawBobClient.login(homeserver, bobCreds.username, bobCreds.password, bobDirs.state)
             bobClient = bob
             bob.e2eeInit()
             val bobUserId = bob.userId()
-            harness.report("Bob angemeldet: $bobUserId")
+            harness.report("Bob signed in: $bobUserId")
 
-            // 3. Alice erstellt unverschlüsselten Raum mit Bob-Einladung.
+            // 3. Alice creates an unencrypted room with a Bob invitation.
             val roomName = "kailink-e2e-a-${UUID.randomUUID().toString().take(8)}"
             val roomId = alice.createRoom(roomName, listOf(bobUserId), encrypted = false)
-            harness.report("Raum erstellt: $roomId")
+            harness.report("Room created: $roomId")
 
-            // 4. Bob tritt bei (Einladung annehmen).
+            // 4. Bob joins (accepts the invitation).
             bob.joinRoom(roomId)
-            harness.report("Bob beigetreten: $roomId")
+            harness.report("Bob joined: $roomId")
 
-            // 5. Alice: Chronik VOR Bobs Nachricht abonnieren (kein Live-Sync:
-            // SyncService braucht Sliding Sync, das Conduit nicht bietet;
-            // stattdessen treibt syncOnce im Poll-Loop unten den Sync).
+            // 5. Alice: subscribe to the timeline BEFORE Bob's message (no live sync:
+            // SyncService needs sliding sync, which Conduit does not offer;
+            // instead syncOnce in the poll loop below drives the sync).
             val received = CopyOnWriteArrayList<Message>()
             val collector = scope.launchInCollector(alice) { received.addAll(it) }
             alice.openTimeline(roomId)
 
-            // 6. Bob sendet (Queue via syncOnce flushen) + Alice syncen.
+            // 6. Bob sends (flush the queue via syncOnce) + Alice syncs.
             val body = "e2e-a-${UUID.randomUUID()}"
             bob.sendText(roomId, body)
             bob.syncOnce()
             alice.syncOnce()
-            harness.report("Bob hat gesendet: $body")
+            harness.report("Bob has sent: $body")
 
-            // 7. Alice pollt: syncOnce treibt Sync + Send-Queue-Flush, die offene
-            // Timeline liefert die Events an den Collector.
+            // 7. Alice polls: syncOnce drives sync + send-queue flush; the open
+            // timeline delivers the events to the collector.
             val hit: Message? = withTimeoutOrNull(POLL_TIMEOUT_MILLIS) {
                 var found: Message? = null
                 while (found == null) {
                     val match = received.firstOrNull { it.body == body }
                     if (match != null) {
                         assertEquals(
-                            "Unerwarteter DeliveryState für empfangene Nachricht",
+                            "Unexpected DeliveryState for the received message",
                             DeliveryState.SENT,
                             match.state,
                         )
@@ -126,12 +126,12 @@ class MatrixE2eTest {
                 }
                 found
             }
-            checkNotNull(hit) { "Alice hat Bobs Nachricht nicht empfangen (Timeout ${POLL_TIMEOUT_MILLIS} ms, body=$body)" }
-            harness.report("Alice hat empfangen: id=${hit.id} state=${hit.state}")
+            checkNotNull(hit) { "Alice did not receive Bob's message (timeout ${POLL_TIMEOUT_MILLIS} ms, body=$body)" }
+            harness.report("Alice has received: id=${hit.id} state=${hit.state}")
 
-            // 8. Restore-Leg: kein logout! dispose → neu → restore → rooms().
+            // 8. Restore leg: no logout! dispose → new → restore → rooms().
             val savedSession = checkNotNull(FileSessionStore(aliceStoreFile).load()) {
-                "FileSessionStore enthält nach Login keine Sitzung"
+                "FileSessionStore contains no session after login"
             }
             alice.dispose()
             val alice2 = MatrixSdkChannelClient(
@@ -147,19 +147,19 @@ class MatrixE2eTest {
             alice2.syncOnce()
             val roomIds = alice2.rooms().map { it.id }
             assertTrue(
-                "Raum $roomId nach Restore nicht in rooms() (${roomIds.size} Räume)",
+                "Room $roomId not in rooms() after restore (${roomIds.size} rooms)",
                 roomId in roomIds,
             )
-            harness.report("Restore-Leg ok: Raum nach restore() in rooms() enthalten")
+            harness.report("Restore leg ok: room contained in rooms() after restore()")
             collector.cancel()
 
-            // 9. Chunk C2: Pusher-Registrierung + C2b Zustellbeweis.
+            // 9. Chunk C2: pusher registration + C2b delivery proof.
             runPushLeg(harness, homeserver, gateway, pusherGateway, aliceCreds, scope, alice2, roomId)
 
-            // 10. Chunk B (verschluesselt): gleicher Ablauf mit encrypted=true,
-            // Alice mit e2eeTestConfig (ALL_DEVICES + UNTRUSTED). Laeuft der
-            // verschluesselte Pfad an einer Conduit-Grenze auf, bleibt Chunk A
-            // das harte Ergebnis und B wird als Diagnose berichtet.
+            // 10. Chunk B (encrypted): same flow with encrypted=true,
+            // Alice with e2eeTestConfig (ALL_DEVICES + UNTRUSTED). If the
+            // encrypted path hits a Conduit limit, Chunk A remains the hard
+            // result and B is reported as diagnostics.
             runEncryptedLeg(harness, homeserver, gateway, pusherGateway, aliceCreds, bobCreds, scope)
         } finally {
             runCatching { aliceClient?.dispose() }
@@ -171,12 +171,12 @@ class MatrixE2eTest {
     }
 
     /**
-     * Chunk C2: registriert einen synthetischen UnifiedPush-Endpoint als
-     * Matrix-Pusher (via [PushController.onNewEndpoint] → SUT-Pfad, kein
-     * Distributor nötig), assertert ihn über `GET /pushers` (app_id,
-     * pushkey, kind=http, data.url=Gateway) und beweist C2b: Nach einer
-     * Bob-Nachricht MUSS ntfy einen Publish erhalten (ntfy-Cache-API des
-     * Topics = Conduit→ntfy-Zustellung, sonst Fail).
+     * Chunk C2: registers a synthetic UnifiedPush endpoint as a
+     * Matrix pusher (via [PushController.onNewEndpoint] → SUT path, no
+     * distributor needed), asserts it via `GET /pushers` (app_id,
+     * pushkey, kind=http, data.url=gateway) and proves C2b: after a
+     * Bob message ntfy MUST have received a publish (ntfy cache API of
+     * the topic = Conduit→ntfy delivery, otherwise fail).
      */
     private suspend fun runPushLeg(
         harness: E2eHarness,
@@ -189,11 +189,11 @@ class MatrixE2eTest {
         roomId: String,
     ) {
         val topic = "kailink-e2e-${UUID.randomUUID().toString().take(8)}"
-        // Push-Trennung: Der Endpoint (pushkey) ist die aus Emulator-Sicht
-        // lesbare ntfy-URL (Cache-Pruefung via `gateway`/adb reverse); das
-        // Gateway (data.url) zeigt aus Conduit-Sicht ins Container-Netz
-        // (`pusherGateway`, via alice2-Konstruktor gesetzt). ntfy parst das
-        // Topic aus dem pushkey-Pfad — Host-Anteil ist irrelevant.
+        // Push separation: the endpoint (pushkey) is the ntfy URL readable
+        // from the emulator's point of view (cache check via `gateway`/adb reverse); the
+        // gateway (data.url) points into the container network from Conduit's
+        // point of view (`pusherGateway`, set via the alice2 constructor). ntfy parses the
+        // topic from the pushkey path — the host part is irrelevant.
         val endpoint = "$gateway/$topic"
         val controller = PushController(alice, scope, harness::report)
         controller.onNewEndpoint(endpoint)
@@ -202,22 +202,22 @@ class MatrixE2eTest {
             kotlinx.coroutines.delay(500)
         }
         checkNotNull(controller.lastRegisteredEndpoint) {
-            "C2: Pusher-Registrierung schlug fehl (lastRegisteredEndpoint==null)"
+            "C2: pusher registration failed (lastRegisteredEndpoint==null)"
         }
-        harness.report("C2: Endpoint registriert: $endpoint")
+        harness.report("C2: endpoint registered: $endpoint")
 
-        // GET /pushers-Assert gegen Conduit (Alice-Token aus laufender Sitzung).
-        val session = checkNotNull(alice.activeSession) { "C2: keine aktive Alice-Sitzung" }
+        // GET /pushers assert against Conduit (Alice token from the running session).
+        val session = checkNotNull(alice.activeSession) { "C2: no active Alice session" }
         val pushersJson = harness.httpGet(
             "${homeserver}/_matrix/client/v3/pushers",
             session.accessToken,
         )
         harness.report("C2: GET /pushers → ${pushersJson.take(400)}")
-        assertTrue("C2: pushkey $endpoint nicht in /pushers", pushersJson.contains(endpoint))
-        assertTrue("C2: app_id org.box44.kailink nicht in /pushers", pushersJson.contains("org.box44.kailink"))
-        assertTrue("C2: gateway $pusherGateway nicht in /pushers", pushersJson.contains(pusherGateway))
+        assertTrue("C2: pushkey $endpoint not in /pushers", pushersJson.contains(endpoint))
+        assertTrue("C2: app_id org.box44.kailink not in /pushers", pushersJson.contains("org.box44.kailink"))
+        assertTrue("C2: gateway $pusherGateway not in /pushers", pushersJson.contains(pusherGateway))
 
-        // C2b: Bob-Nachricht → ntfy MUSS einen Publish am Topic zeigen.
+        // C2b: Bob message → ntfy MUST show a publish on the topic.
         val bobDirs = harness.newStoreDirs("bob-c2b")
         var bobClient: RawBobClient? = null
         try {
@@ -231,7 +231,7 @@ class MatrixE2eTest {
                 runCatching { bob.syncOnce() }
                 runCatching { alice.syncOnce() }
             }
-            harness.report("C2b: Bob hat gesendet: $c2bBody")
+            harness.report("C2b: Bob has sent: $c2bBody")
         } finally {
             runCatching { bobClient?.close() }
             harness.deleteStoreDirs(bobDirs)
@@ -247,9 +247,9 @@ class MatrixE2eTest {
             }
             kotlinx.coroutines.delay(2_000)
         }
-        harness.report("C2b: ntfy-Antwort: ${lastNtfy.take(400)}")
-        assertTrue("C2b: kein Publish bei ntfy für Topic $topic (Conduit→ntfy-Zustellung fehlt)", delivered)
-        harness.report("C2b ok: Conduit→ntfy-Zustellung bewiesen (Topic $topic)")
+        harness.report("C2b: ntfy response: ${lastNtfy.take(400)}")
+        assertTrue("C2b: no publish at ntfy for topic $topic (Conduit→ntfy delivery missing)", delivered)
+        harness.report("C2b ok: Conduit→ntfy delivery proven (topic $topic)")
     }
 
     private suspend fun runEncryptedLeg(
@@ -278,21 +278,21 @@ class MatrixE2eTest {
             )
             aliceClient = alice
             val aliceSession = alice.login(homeserver, aliceCreds.username, aliceCreds.password)
-            harness.report("E2E B: Alice angemeldet: ${aliceSession.userId}")
+            harness.report("E2E B: Alice signed in: ${aliceSession.userId}")
 
             val bob = RawBobClient.login(homeserver, bobCreds.username, bobCreds.password, bobDirs.state)
             bobClient = bob
             bob.e2eeInit()
-            harness.report("E2E B: Bob angemeldet: ${bob.userId()}")
+            harness.report("E2E B: Bob signed in: ${bob.userId()}")
 
             val roomName = "kailink-e2e-b-${UUID.randomUUID().toString().take(8)}"
             val roomId = alice.createRoom(roomName, listOf(bob.userId()), encrypted = true)
-            harness.report("E2E B: Raum erstellt (verschluesselt): $roomId")
+            harness.report("E2E B: room created (encrypted): $roomId")
             try {
                 bob.joinRoom(roomId)
-                harness.report("E2E B: Bob beigetreten: $roomId")
+                harness.report("E2E B: Bob joined: $roomId")
             } catch (t: Throwable) {
-                harness.report("E2E B: Bob-Join FEHLER: ${t.message}")
+                harness.report("E2E B: Bob-join ERROR: ${t.message}")
                 throw t
             }
             repeat(2) {
@@ -307,21 +307,21 @@ class MatrixE2eTest {
             val body = "e2e-b-${UUID.randomUUID()}"
             try {
                 bob.sendText(roomId, body)
-                harness.report("E2E B: Bob-send ok")
+                harness.report("E2E B: bob-send ok")
             } catch (t: Throwable) {
-                harness.report("E2E B: Bob-send FEHLER: ${t.message}")
+                harness.report("E2E B: bob-send ERROR: ${t.message}")
                 throw t
             }
             repeat(3) {
                 runCatching { bob.syncOnce() }.onFailure { harness.report("E2E B: sendflush bob.syncOnce: ${it.message}") }
                 runCatching { alice.syncOnce() }.onFailure { harness.report("E2E B: sendflush alice.syncOnce: ${it.message}") }
             }
-            harness.report("E2E B: Bob hat gesendet: $body")
+            harness.report("E2E B: Bob has sent: $body")
 
             val hit: Message? = withTimeoutOrNull(POLL_TIMEOUT_MILLIS) {
                 var found: Message? = null
                 while (found == null) {
-                    found = received.firstOrNull { it.body == body || it.body.contains("verschluesselt") }
+                    found = received.firstOrNull { it.body == body || it.body.contains("encrypted") }
                     if (found == null) {
                         runCatching { bob.syncOnce() }
                         runCatching { alice.syncOnce() }
@@ -330,13 +330,13 @@ class MatrixE2eTest {
                 }
                 found
             }
-            checkNotNull(hit) { "E2E B: Alice hat Bobs Nachricht nicht empfangen (Timeout, body=$body)" }
+            checkNotNull(hit) { "E2E B: Alice did not receive Bob's message (timeout, body=$body)" }
             assertEquals(
-                "E2E B: Nachricht nicht entschluesselt (state=${hit.state}, body=${hit.body})",
+                "E2E B: message not decrypted (state=${hit.state}, body=${hit.body})",
                 DeliveryState.SENT,
                 hit.state,
             )
-            assertEquals("E2E B: Body-Mismatch", body, hit.body)
+            assertEquals("E2E B: body mismatch", body, hit.body)
             harness.report("E2E B ok: id=${hit.id} state=${hit.state}")
             collector.cancel()
         } finally {

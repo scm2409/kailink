@@ -3,13 +3,13 @@ package org.box44.kailink.data.push
 import org.box44.kailink.domain.push.PushRegistrationTrigger
 
 /**
- * Phase-1-Ersatz für den UnifiedPush-Connector (Grundsatz G5).
+ * Phase-1 replacement for the UnifiedPush connector (principle G5).
  *
- * Simuliert den Distributor-Ablauf lokal: Distributor vorhanden →
- * Endpoint-Zustellung → Push-Zustellung. Die komplette Push-Kette
- * ([PushController], Pusher-Registrierung, Sync-Auslösung) bleibt dabei
- * echt und ist JVM-testbar; in Phase 2 ersetzt der UnifiedPush-Connector
- * (`UnifiedPushRegistrar` + `KaiLinkPushReceiver`) nur diese Klasse.
+ * Simulates the distributor flow locally: distributor available →
+ * endpoint delivery → push delivery. The entire push chain
+ * ([PushController], pusher registration, sync triggering) remains real
+ * and JVM-testable; in Phase 2 the UnifiedPush connector
+ * (`UnifiedPushRegistrar` + `KaiLinkPushReceiver`) replaces only this class.
  */
 class SimulatedPushTrigger(
     private val controller: PushController,

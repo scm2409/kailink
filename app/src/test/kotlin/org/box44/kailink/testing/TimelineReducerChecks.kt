@@ -16,47 +16,47 @@ fun timelineReducerChecks() {
         timestampMillis = 1_000L,
     )
 
-    Checks.check("Reset ersetzt die Liste") {
+    Checks.check("Reset replaces the list") {
         val result = TimelineReducer.apply(
             listOf(message("a")),
             listOf(TimelinePatch.Reset(listOf(message("b"), message("c")))),
         )
-        expectEquals(listOf("b", "c"), result.map(Message::id), "Reihenfolge nach Reset")
+        expectEquals(listOf("b", "c"), result.map(Message::id), "Order after Reset")
     }
 
-    Checks.check("PushBack hängt am Ende an") {
+    Checks.check("PushBack appends at the end") {
         val result = TimelineReducer.apply(listOf(message("a")), TimelinePatch.PushBack(message("b")))
-        expectEquals(listOf("a", "b"), result.map(Message::id), "Reihenfolge nach PushBack")
+        expectEquals(listOf("a", "b"), result.map(Message::id), "Order after PushBack")
     }
 
-    Checks.check("PushFront fügt vorne ein") {
+    Checks.check("PushFront inserts at the front") {
         val result = TimelineReducer.apply(listOf(message("b")), TimelinePatch.PushFront(message("a")))
-        expectEquals(listOf("a", "b"), result.map(Message::id), "Reihenfolge nach PushFront")
+        expectEquals(listOf("a", "b"), result.map(Message::id), "Order after PushFront")
     }
 
-    Checks.check("Insert erzwingt gültigen Index") {
+    Checks.check("Insert forces a valid index") {
         val result = TimelineReducer.apply(
             listOf(message("a")),
             listOf(TimelinePatch.Insert(99, message("b"))),
         )
-        expectEquals(listOf("a", "b"), result.map(Message::id), "Index 99 wird ans Ende gezwungen")
+        expectEquals(listOf("a", "b"), result.map(Message::id), "Index 99 is forced to the end")
     }
 
-    Checks.check("Set aktualisiert vorhandenes Element") {
+    Checks.check("Set updates the existing element") {
         val result = TimelineReducer.apply(
             listOf(message("a"), message("b")),
-            TimelinePatch.Set(1, message("b", body = "geändert")),
+            TimelinePatch.Set(1, message("b", body = "changed")),
         )
-        expectEquals("geändert", result[1].body, "Body nach Set")
+        expectEquals("changed", result[1].body, "Body after Set")
     }
 
-    Checks.check("Set mit ungültigem Index ist keine Operation") {
+    Checks.check("Set with an invalid index is a no-op") {
         val original = listOf(message("a"))
         val result = TimelineReducer.apply(original, TimelinePatch.Set(5, message("z")))
-        expectEquals(original, result, "Liste bleibt unverändert")
+        expectEquals(original, result, "List stays unchanged")
     }
 
-    Checks.check("Remove, PopFront und PopBack reduzieren korrekt") {
+    Checks.check("Remove, PopFront and PopBack reduce correctly") {
         val base = listOf(message("a"), message("b"), message("c"))
         expectEquals(
             listOf("a", "c"),
@@ -75,15 +75,15 @@ fun timelineReducerChecks() {
         )
     }
 
-    Checks.check("Truncate behält die letzten Elemente") {
+    Checks.check("Truncate keeps the last elements") {
         val result = TimelineReducer.apply(
             listOf(message("a"), message("b"), message("c")),
             TimelinePatch.Truncate(2),
         )
-        expectEquals(listOf("b", "c"), result.map(Message::id), "Sliding-Window")
+        expectEquals(listOf("b", "c"), result.map(Message::id), "Sliding window")
     }
 
-    Checks.check("Patch-Sequenz wendet Reihenfolge an") {
+    Checks.check("Patch sequence applies in order") {
         val result = TimelineReducer.apply(
             emptyList(),
             listOf(
@@ -92,6 +92,6 @@ fun timelineReducerChecks() {
                 TimelinePatch.Remove(0),
             ),
         )
-        expectEquals(listOf("b", "c"), result.map(Message::id), "Sequenzielle Anwendung")
+        expectEquals(listOf("b", "c"), result.map(Message::id), "Sequential application")
     }
 }

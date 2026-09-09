@@ -14,20 +14,20 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Keystore-verschlüsselte Sitzungspersistenz (nur Android, produktive
- * Verdrahtung in `AppGraph`).
+ * Keystore-encrypted session persistence (Android only, production
+ * wiring in `AppGraph`).
  *
- * - AES-256/GCM-Schlüssel liegt nicht exportierbar im AndroidKeyStore
- *   (Alias [DEFAULT_KEY_ALIAS]); bei Bedarf wird er erzeugt.
- * - Die Sitzung wird als `java.util.Properties`-Block serialisiert (gleiche
- *   Schlüssel wie [FileSessionStore]) und als `IV || Chiffrat` in eine
- *   App-private Datei geschrieben; ein zufälliger IV pro `save()`.
- * - Lesefehler/fehlernde Dateien liefern `null` (wie [FileSessionStore]);
- *   die Domäne sieht nur den Vertrag [SessionStore] (G4).
+ * - The AES-256/GCM key lives non-exportable in the AndroidKeyStore
+ *   (alias [DEFAULT_KEY_ALIAS]); it is created on demand.
+ * - The session is serialized as a `java.util.Properties` block (same
+ *   keys as [FileSessionStore]) and written as `IV || ciphertext` to an
+ *   app-private file; a random IV per `save()`.
+ * - Read errors/missing files yield `null` (like [FileSessionStore]);
+ *   the domain only sees the [SessionStore] contract (G4).
  *
- * JVM-Prüfungen nutzen weiterhin [FileSessionStore]; AndroidKeyStore ist
- * auf der JVM nicht verfügbar, daher gibt es hierfür keine JVM-Prüfung
- * (dokumentierte Grenze, siehe docs/features/verification.md).
+ * JVM checks keep using [FileSessionStore]; the AndroidKeyStore is
+ * not available on the JVM, therefore there is no JVM check for it
+ * (documented limit, see docs/features/verification.md).
  */
 class AndroidKeystoreSessionStore(
     private val file: File,

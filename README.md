@@ -1,78 +1,78 @@
 # KaiLink
 
-KaiLink ist ein Proof-of-Concept (PoC) eines Android-Messengers auf Basis von
-[Matrix](https://matrix.org/). Phase 1 lieferte ein **vollständig offline
-baubares Fundament**: Domänenschicht mit Nahtstellen, Anmeldung mit
-Sitzungswiederherstellung, Raumliste, Chronik mit Senden, eine
-Push-Abstraktion mit Zustandsautomat sowie geprüfte JVM-Verifikation.
+KaiLink is a proof of concept (PoC) of an Android messenger based on
+[Matrix](https://matrix.org/). Phase 1 delivered a **foundation that can be
+built completely offline**: domain layer with seams, login with
+session restore, room list, timeline with sending, a
+push abstraction with a state machine, and verified JVM verification.
 
-> **Status: Phase 2 (Stand 2026-09-08).** Der echte Matrix-Adapter
-> (`MatrixSdkChannelClient`, matrix-rust-sdk 26.09.08) und die
-> [UnifiedPush](https://unifiedpush.org/)-Anbindung (`UnifiedPushRegistrar` +
-> `KaiLinkPushReceiver`, connector 3.3.5, ohne Google/FCM) sind kompiliert
-> und in `AppGraph` verdrahtet; `testDebugUnitTest assembleDebug` ist grün.
-> Laufzeit gegen echten Homeserver/Distributor ist noch nicht beobachtet
-> (kein Gerät in dieser Umgebung) — siehe
+> **Status: Phase 2 (as of 2026-09-08).** The real Matrix adapter
+> (`MatrixSdkChannelClient`, matrix-rust-sdk 26.09.08) and the
+> [UnifiedPush](https://unifiedpush.org/) integration (`UnifiedPushRegistrar` +
+> `KaiLinkPushReceiver`, connector 3.3.5, without Google/FCM) are compiled
+> and wired in `AppGraph`; `testDebugUnitTest assembleDebug` is green.
+> Runtime against a real homeserver/distributor has not yet been observed
+> (no device in this environment) — see
 > [`docs/architecture.md`](docs/architecture.md).
 
-## Kernentscheidungen
+## Core decisions
 
-| Entscheidung | Begründung |
+| Decision | Rationale |
 | --- | --- |
-| Phase 1: In-Memory-Kanal hinter `ChannelClient` | Die Bedingungen der ersten Phase erlaubten keinen Netzwerkzugriff; die Schnittstelle blieb identisch, der Adapter war austauschbar (G5) |
-| Phase 2: echtes `matrix-rust-sdk` | Offizielle Rust-Implementierung inkl. E2EE (Olm/Megolm); `MatrixSdkChannelClient` ist seit 2026-09-08 im Build und verdrahtet |
-| Push-Abstraktion (`PushController` + `PushRegistrationTrigger`) | Zustandsautomat ist JVM-getestet; Phase 2 tauscht nur den Trigger gegen den UnifiedPush-Connector |
-| Android-Framework-Views | Jetpack-Compose-Artefakte sind im lokalen Offline-Cache nicht vorhanden; die UI-Schicht ist so geschnitten, dass Phase 2 auf Compose umstellen kann |
-| Kein Google/FCM-Code im Repo | Projektverfassung, siehe [`docs/project-constitution.md`](docs/project-constitution.md) |
+| Phase 1: in-memory channel behind `ChannelClient` | The conditions of the first phase did not allow network access; the interface stayed identical and the adapter was swappable (G5) |
+| Phase 2: real `matrix-rust-sdk` | Official Rust implementation including E2EE (Olm/Megolm); `MatrixSdkChannelClient` has been in the build and wired since 2026-09-08 |
+| Push abstraction (`PushController` + `PushRegistrationTrigger`) | The state machine is JVM-tested; Phase 2 swaps only the trigger for the UnifiedPush connector |
+| Android framework views | Jetpack Compose artifacts are not available in the local offline cache; the UI layer is cut so that Phase 2 can switch to Compose |
+| No Google/FCM code in the repo | Project constitution, see [`docs/project-constitution.md`](docs/project-constitution.md) |
 
-## Build (diese Umgebung)
+## Build (this environment)
 
-Voraussetzungen: JDK 21 (bereit über `mise.toml`), Android SDK unter
-`/home/dev/android-sdk` (eingetragen in `local.properties`, nicht im Repo),
-Gradle Wrapper 9.1.0, AGP 8.13.2, Kotlin 2.2.21.
+Prerequisites: JDK 21 (provided via `mise.toml`), Android SDK under
+`/home/dev/android-sdk` (recorded in `local.properties`, not in the repo),
+Gradle wrapper 9.1.0, AGP 8.13.2, Kotlin 2.2.21.
 
 ```bash
-./gradlew testDebugUnitTest assembleDebug   # JVM-Prüfungen (JUnit) + Debug-APK
-./gradlew check                             # inkl. Lint (abortOnError=false)
+./gradlew testDebugUnitTest assembleDebug   # JVM checks (JUnit) + debug APK
+./gradlew check                             # including lint (abortOnError=false)
 ```
 
-Beobachtet am 2026-09-08: `BUILD SUCCESSFUL`; JUnit-Bericht `tests="1"
-failures="0"` (der Test führt alle 39 Prüfgruppen-Checks aus), Prüfbericht
-unter `app/build/reports/phase1-checks.txt` (39/39 bestanden), siehe
+Observed on 2026-09-08: `BUILD SUCCESSFUL`; JUnit report `tests="1"
+failures="0"` (the test runs all 39 check-group checks), check report
+under `app/build/reports/phase1-checks.txt` (39/39 passed), see
 [`docs/features/verification.md`](docs/features/verification.md).
-Ergebnis: `app/build/outputs/apk/debug/app-debug.apk`
+Result: `app/build/outputs/apk/debug/app-debug.apk`
 (`org.box44.kailink`, versionName `0.2.0-phase1`, minSdk 28, targetSdk 36,
-inkl. `libmatrix_sdk_ffi.so` des matrix-rust-sdk).
+including `libmatrix_sdk_ffi.so` from the matrix-rust-sdk).
 
-## Projektstruktur
+## Project structure
 
 ```
 app/src/main/kotlin/org/box44/kailink/
-├── domain/          Reine Domänenlogik ohne Android-Abhängigkeiten (JVM-testbar)
+├── domain/          Pure domain logic without Android dependencies (JVM-testable)
 │   ├── model/       Session, Room, Message
-│   ├── ChannelClient.kt    Kanal-Nahtstelle (Adapter implementieren sie)
-│   ├── SessionStore.kt     Sitzungspersistenz-Vertrag
-│   ├── TimelineReducer.kt  Reduziert Chronik-Patches auf den UI-Zustand
-│   ├── push/        Push-Nahtstellen (PushState, PushRegistrationTrigger)
-│   └── speech/      Sprach-Nahtstellen (STT/TTS, No-Op-Implementierung)
+│   ├── ChannelClient.kt    Channel seam (adapters implement it)
+│   ├── SessionStore.kt     Session persistence contract
+│   ├── TimelineReducer.kt  Reduces timeline patches to the UI state
+│   ├── push/        Push seams (PushState, PushRegistrationTrigger)
+│   └── speech/      Speech seams (STT/TTS, no-op implementation)
 ├── data/
-│   ├── channel/     InMemoryChannelClient (JVM-Referenz für Prüfungen)
-│   ├── matrix/      MatrixSdkChannelClient (matrix-rust-sdk, produktiv)
+│   ├── channel/     InMemoryChannelClient (JVM reference for checks)
+│   ├── matrix/      MatrixSdkChannelClient (matrix-rust-sdk, production)
 │   ├── push/        PushController, UnifiedPushRegistrar, KaiLinkPushReceiver,
-│   │                SimulatedPushTrigger (JVM-Referenz)
-│   └── session/     FileSessionStore (Properties-Datei, App-privat)
-├── di/              AppGraph (manuelle Verdrahtung: Matrix + UnifiedPush)
-├── ui/              Framework-Views + ViewModels (Login, Raumliste, Chronik)
-└── MainActivity.kt  Eine Activity, drei umgeschaltete Screens
-app/src/phase2/      Quellpfad des Matrix-Adapters (in main eingebunden)
-app/src/test/        JVM-Prüfungen (JUnit: AllChecksTest → 39 Checks)
-docs/                Deutsche Dokumentation (Verfassung, Architektur, Protokolle)
+│   │                SimulatedPushTrigger (JVM reference)
+│   └── session/     FileSessionStore (properties file, app-private)
+├── di/              AppGraph (manual wiring: Matrix + UnifiedPush)
+├── ui/              Framework views + ViewModels (login, room list, timeline)
+└── MainActivity.kt  One activity, three switched screens
+app/src/phase2/      Source path of the Matrix adapter (included in main)
+app/src/test/        JVM checks (JUnit: AllChecksTest → 39 checks)
+docs/                Project documentation (constitution, architecture, protocols)
 ```
 
-## Dokumentation
+## Documentation
 
-- [`docs/project-constitution.md`](docs/project-constitution.md) — Grundsätze G1–G9
-- [`docs/architecture.md`](docs/architecture.md) — Schichten, Datenfluss, Phase-2-Migrationspfad
-- [`docs/features/verification.md`](docs/features/verification.md) — beobachtete Ergebnisse (G8)
-- [`docs/manualtest-protokoll.md`](docs/manualtest-protokoll.md) — manuelle Geräteprüfungen (V4)
-- `docs/features/*.md` — Feature-Dokumente (Anmeldung, Raumliste/Chronik, Push, Sprache, E2EE-Ausblick)
+- [`docs/project-constitution.md`](docs/project-constitution.md) — principles G1–G9
+- [`docs/architecture.md`](docs/architecture.md) — layers, data flow, Phase-2 migration path
+- [`docs/features/verification.md`](docs/features/verification.md) — observed results (G8)
+- [`docs/manualtest-protokoll.md`](docs/manualtest-protokoll.md) — manual device checks (V4)
+- `docs/features/*.md` — feature documents (login, room list/timeline, push, speech, E2EE outlook)

@@ -13,7 +13,7 @@ fun pushControllerChecks() {
     fun controllerWith(client: FakeChannelClient): PushController =
         PushController(client, CoroutineScope(SupervisorJob() + Dispatchers.Unconfined))
 
-    Checks.check("Endpoint führt zur Pusher-Registrierung und Zustand REGISTERED") {
+    Checks.check("Endpoint leads to pusher registration and state REGISTERED") {
         val client = FakeChannelClient()
         val controller = controllerWith(client)
 
@@ -22,51 +22,51 @@ fun pushControllerChecks() {
         expectEquals(
             listOf("https://push.example.org/endpoint"),
             client.registerEndpointCalls,
-            "Endpoint an ChannelClient delegiert",
+            "Endpoint delegated to ChannelClient",
         )
-        expectEquals(PushState.REGISTERED, controller.state.value, "Zustand")
+        expectEquals(PushState.REGISTERED, controller.state.value, "State")
     }
 
-    Checks.check("Push-Nachricht stößt Sync an") {
+    Checks.check("Push message triggers sync") {
         val client = FakeChannelClient()
         val controller = controllerWith(client)
 
         controller.onMessage()
 
-        expectEquals(1, client.syncOnceCalls, "syncOnce-Aufrufe")
+        expectEquals(1, client.syncOnceCalls, "syncOnce calls")
     }
 
-    Checks.check("Fehlschlag und Aufhebung setzen Zustand zurück") {
+    Checks.check("Failure and unregistration reset the state") {
         val client = FakeChannelClient()
         val controller = controllerWith(client)
 
         controller.onDistributorAvailable()
-        expectEquals(PushState.READY, controller.state.value, "nach Distributor")
+        expectEquals(PushState.READY, controller.state.value, "after distributor")
 
         controller.onRegistrationFailed("NETWORK")
-        expectEquals(PushState.FAILED, controller.state.value, "nach Fehlschlag")
+        expectEquals(PushState.FAILED, controller.state.value, "after failure")
 
         controller.onUnregistered()
-        expectEquals(PushState.NOT_AVAILABLE, controller.state.value, "nach Aufhebung")
+        expectEquals(PushState.NOT_AVAILABLE, controller.state.value, "after unregistration")
 
         controller.onNoDistributor()
-        expectEquals(PushState.NOT_AVAILABLE, controller.state.value, "nach kein Distributor")
+        expectEquals(PushState.NOT_AVAILABLE, controller.state.value, "after no distributor")
     }
 
-    Checks.check("Registrierungsfehler beim Pusher führt zu FAILED") {
+    Checks.check("Pusher registration error leads to FAILED") {
         val client = FakeChannelClient().apply {
             registerPushEndpointBehavior = {
-                throw ChannelException("Pusher-Registrierung fehlgeschlagen: offline")
+                throw ChannelException("Pusher registration failed: offline")
             }
         }
         val controller = controllerWith(client)
 
         controller.onNewEndpoint("https://push.example.org/endpoint")
 
-        expectEquals(PushState.FAILED, controller.state.value, "Zustand nach Fehler")
+        expectEquals(PushState.FAILED, controller.state.value, "State after error")
     }
 
-    Checks.check("PushConfiguration: Standard-Gateway und App-ID") {
+    Checks.check("PushConfiguration: default gateway and app ID") {
         expectEquals(
             "https://ntfy.sh/_matrix/push/v1/notify",
             PushConfiguration.DEFAULT_GATEWAY_URL,
@@ -74,11 +74,11 @@ fun pushControllerChecks() {
         )
         expectEquals("org.box44.kailink", PushConfiguration.DEFAULT_APP_ID, "DEFAULT_APP_ID")
         val configuration = PushConfiguration()
-        expectEquals(PushConfiguration.DEFAULT_GATEWAY_URL, configuration.gatewayUrl, "Standard-Gateway")
-        expectEquals(PushConfiguration.DEFAULT_APP_ID, configuration.appId, "Standard-App-ID")
+        expectEquals(PushConfiguration.DEFAULT_GATEWAY_URL, configuration.gatewayUrl, "Default gateway")
+        expectEquals(PushConfiguration.DEFAULT_APP_ID, configuration.appId, "Default app ID")
     }
 
-    Checks.check("Endpoint-Rotation: jeder geänderte Endpoint wird erneut registriert") {
+    Checks.check("Endpoint rotation: every changed endpoint is registered again") {
         val client = FakeChannelClient()
         val controller = controllerWith(client)
 
@@ -91,9 +91,9 @@ fun pushControllerChecks() {
                 "https://push.example.org/endpoint-2",
             ),
             client.registerEndpointCalls,
-            "beide Endpoints an Kanalschicht registriert",
+            "both endpoints registered at the channel layer",
         )
-        expectEquals("https://push.example.org/endpoint-2", controller.lastRegisteredEndpoint, "zuletzt registriert")
-        expectEquals(PushState.REGISTERED, controller.state.value, "Zustand nach Rotation")
+        expectEquals("https://push.example.org/endpoint-2", controller.lastRegisteredEndpoint, "last registered")
+        expectEquals(PushState.REGISTERED, controller.state.value, "State after rotation")
     }
 }

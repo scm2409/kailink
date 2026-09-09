@@ -15,13 +15,13 @@ android {
         minSdk = 28
         targetSdk = 36
         versionCode = 1
-        versionName = "0.2.1-phase1"
+        versionName = "0.2.2-phase1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         debug {
-            // Martin's Telefon: arm64-v8a (Policy unverändert).
+            // Martin's phone: arm64-v8a (policy unchanged).
             ndk {
                 abiFilters += listOf("arm64-v8a")
             }
@@ -49,7 +49,7 @@ android {
 
     sourceSets {
         getByName("main") {
-            // Phase-2-Adapter (matrix-rust-sdk) ist Teil des produktiven Builds.
+            // Phase-2 adapter (matrix-rust-sdk) is part of the production build.
             kotlin.srcDir("src/phase2/kotlin")
         }
     }

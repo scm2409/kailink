@@ -19,21 +19,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 /**
- * Manuelle Abhängigkeitsverdrahtung des PoC (bewusst kein Hilt/Dagger).
- * Erzeugt genau einen Graph pro Prozess.
+ * Manual dependency wiring of the PoC (deliberately no Hilt/Dagger).
+ * Creates exactly one graph per process.
  *
- * Produktive Verdrahtung: echter matrix-rust-sdk-Kanal
- * ([MatrixSdkChannelClient]), UnifiedPush-Registrierung
- * ([UnifiedPushRegistrar]) und Keystore-verschlüsselte Sitzung
- * ([AndroidKeystoreSessionStore]). Die Phase-1-Referenzadapter
+ * Production wiring: real matrix-rust-sdk channel
+ * ([MatrixSdkChannelClient]), UnifiedPush registration
+ * ([UnifiedPushRegistrar]) and Keystore-encrypted session
+ * ([AndroidKeystoreSessionStore]). The Phase-1 reference adapters
  * (`InMemoryChannelClient`, `SimulatedPushTrigger`, `FileSessionStore`)
- * bleiben für JVM-Prüfungen erhalten und sind nicht verdrahtet.
+ * are kept for JVM checks and are not wired.
  */
 class AppGraph(private val appContext: Context) {
 
     val appScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    /** Push-Konfiguration (Gateway/App-ID, reines Kotlin). */
+    /** Push configuration (gateway/app ID, pure Kotlin). */
     val pushConfiguration: PushConfiguration = PushConfiguration()
 
     val sessionStore: SessionStore = AndroidKeystoreSessionStore(
@@ -59,7 +59,7 @@ class AppGraph(private val appContext: Context) {
 
     val pushState get() = pushController.state
 
-    /** Sprach-Nahtstellen: bewusst No-Op (docs/features/sprache.md). */
+    /** Speech seams: deliberately no-op (docs/features/sprache.md). */
     val speechTranscriber: SpeechTranscriber = NoOpSpeechTranscriber()
     val speechSpeaker: SpeechSpeaker = NoOpSpeechSpeaker()
 

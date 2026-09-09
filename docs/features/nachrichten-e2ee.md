@@ -1,47 +1,47 @@
-# Feature: Nachrichten senden/empfangen & E2EE-Ausblick
+# Feature: Sending/Receiving Messages & E2EE Outlook
 
-## Interaktionsmodell (Phase 1, Simulation)
+## Interaction Model (Phase 1, Simulation)
 
-- Senden: Text in das Sendefeld, „Senden" → Nachricht erscheint als
-  ausgehende Sprechblase in der Chronik; Sendefeld wird geleert.
-- Empfangen: Nachrichten der Demoräume erscheinen beim Öffnen; neue
-  „Ereignisse" liefert die In-Memory-Simulation über `TimelineUpdated`.
-- **Phase 1 hat keine Verschlüsselung**: das 🔒-Badge der Demoräume ist
-  reine Anzeige (`isEncrypted`-Flag), Inhalte liegen im Klartext im
-  Speicher.
+- Sending: text into the send field, "Send" → the message appears as
+  an outgoing bubble in the timeline; the send field is cleared.
+- Receiving: messages of the demo rooms appear when opening; new
+  "events" are delivered by the in-memory simulation via `TimelineUpdated`.
+- **Phase 1 has no encryption**: the demo rooms' 🔒 badge is
+  display-only (the `isEncrypted` flag); content sits in plaintext in
+  memory.
 
-## Implementierung (Phase 1)
+## Implementation (Phase 1)
 
-- Senden: `ChannelClient.sendMessage(roomId, body)` → Ablage im
-  In-Memory-Speicher (Richtung `OUTGOING`, Zustand `SENT`) →
-  `TimelineUpdated`-Ereignis → Chronik rendert.
-- `DeliveryState.UNDECRYPTABLE` existiert im Domänenmodell bereits und wird
-  von der Chronik rot dargestellt — die Simulation erzeugt ihn nicht;
-  Phase 2 liefert echte `UnableToDecrypt`-Fälle.
+- Sending: `ChannelClient.sendMessage(roomId, body)` → stored in the
+  in-memory store (direction `OUTGOING`, state `SENT`) →
+  `TimelineUpdated` event → timeline renders.
+- `DeliveryState.UNDECRYPTABLE` already exists in the domain model and is
+  rendered in red by the timeline — the simulation does not produce it;
+  Phase 2 delivers real `UnableToDecrypt` cases.
 
-## E2EE-Ausblick (Phase 2)
+## E2EE Outlook (Phase 2)
 
-- Echtes `matrix-rust-sdk` (Android-Bindings): Megolm/Olm, Send-Queue,
-  automatische Schlüsselverwaltung, SQLite-Krypto-Store
-  (`context.filesDir/matrix/store`) → Schlüssel überleben Neustarts.
-- Übersetzung: SDK-`TimelineDiff` → `TimelinePatch` →
+- Real `matrix-rust-sdk` (Android bindings): Megolm/Olm, send queue,
+  automatic key management, SQLite crypto store
+  (`context.filesDir/matrix/store`) → keys survive restarts.
+- Translation: SDK `TimelineDiff` → `TimelinePatch` →
   `TimelineReducer.apply`; `MsgLikeKind.UnableToDecrypt` →
   `DeliveryState.UNDECRYPTABLE`.
-- Eine explizite Verifizierungs-UI (SAS/Emoji-Vergleich) ist **nicht**
-  geplant; Vertrauen läuft über das Standardverhalten des SDK
-  (Cross-Signing). Das manuelle Protokoll von Phase 2 prüft verschlüsselten
-  Verkehr zwischen zwei Geräten/Konten.
+- An explicit verification UI (SAS/emoji comparison) is **not**
+  planned; trust is handled by the SDK's default behavior
+  (cross-signing). The Phase-2 manual protocol checks encrypted
+  traffic between two devices/accounts.
 
-## PoC-Grenzen
+## PoC Limits
 
-- Keine eigene Verifizierungs-UI, keine Einladungsannahme, keine Räume
-  erstellen.
-- `EventSendState` wird nicht als Fortschritt gerendert; ausgehende
-  Nachrichten werden nach Rückkehr von `send()` als `SENT` geführt.
+- No dedicated verification UI, no invitation acceptance, no room
+  creation.
+- `EventSendState` is not rendered as progress; outgoing
+  messages are tracked as `SENT` after `send()` returns.
 
-## Verifikation
+## Verification
 
-V1: `TimelineViewModelChecks` (5, inkl. Raum-Filter und Fehlerpfade) und
-`InMemoryChannelClientChecks` (6) — bestanden 2026-09-08, siehe
-[`verification.md`](verification.md). V4: manuelles Protokoll, Testfälle
-MT-3/MT-4 (**nicht beobachtet**, kein Gerät). E2EE selbst: Phase 2.
+V1: `TimelineViewModelChecks` (5, incl. room filter and error paths) and
+`InMemoryChannelClientChecks` (6) — passed 2026-09-08, see
+[`verification.md`](verification.md). V4: manual protocol, test cases
+MT-3/MT-4 (**not observed**, no device). E2EE itself: Phase 2.

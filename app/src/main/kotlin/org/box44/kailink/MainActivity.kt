@@ -34,9 +34,9 @@ sealed interface KaiLinkScreen {
 }
 
 /**
- * Phase-1-Oberfläche mit Framework-Views (statt Jetpack Compose, siehe
- * docs/architecture.md): eine Activity, drei durch Sichtbarkeit umgeschaltete
- * Screens, Zustandsaktualisierung über die StateFlows der ViewModels.
+ * Phase-1 UI with framework views (instead of Jetpack Compose, see
+ * docs/architecture.md): one activity, three screens switched by visibility,
+ * state updates via the ViewModels' StateFlows.
  */
 class MainActivity : Activity() {
 

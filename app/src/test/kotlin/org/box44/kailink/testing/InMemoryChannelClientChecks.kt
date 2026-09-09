@@ -28,81 +28,81 @@ private class EventRecorder(client: ChannelClient) {
 
 fun inMemoryChannelClientChecks() {
 
-    Checks.check("Anmeldung mit leeren Feldern wird abgelehnt") {
+    Checks.check("Login with empty fields is rejected") {
         val client = InMemoryChannelClient(FakeSessionStore())
         try {
-            runBlocking { client.login("https://phase1.local", "", "geheim") }
-            throw CheckFailure("ChannelException erwartet")
+            runBlocking { client.login("https://phase1.local", "", "secret") }
+            throw CheckFailure("ChannelException expected")
         } catch (expected: ChannelException) {
-            expectTrue(expected.message!!.contains("Anmeldefelder"), "deutsche Fehlermeldung")
+            expectTrue(expected.message!!.contains("sign-in fields"), "error message")
         }
     }
 
-    Checks.check("Anmeldung erzeugt Sitzung, speichert sie und meldet Räume") {
+    Checks.check("Login creates a session, stores it and reports rooms") {
         val store = FakeSessionStore()
         val client = InMemoryChannelClient(store)
         val recorder = EventRecorder(client)
 
-        runBlocking { client.login("https://phase1.local", "alice", "geheim") }
+        runBlocking { client.login("https://phase1.local", "alice", "secret") }
 
-        expectNotNull(client.activeSession, "aktive Sitzung nach Login")
-        expectTrue(client.activeSession!!.userId.startsWith("@alice:"), "Nutzerkennung")
-        expectEquals(1, store.saveCalls, "Sitzung persistiert")
+        expectNotNull(client.activeSession, "active session after login")
+        expectTrue(client.activeSession!!.userId.startsWith("@alice:"), "user ID")
+        expectEquals(1, store.saveCalls, "Session persisted")
         expectTrue(
             recorder.events.any { it is ChannelEvent.RoomsUpdated },
-            "RoomsUpdated gesendet",
+            "RoomsUpdated sent",
         )
         recorder.stop()
     }
 
-    Checks.check("Senden erzeugt ausgehende Nachricht und Chronik-Ereignis") {
+    Checks.check("Send creates an outgoing message and timeline event") {
         val client = InMemoryChannelClient(FakeSessionStore())
         val recorder = EventRecorder(client)
 
         runBlocking {
-            client.login("https://phase1.local", "alice", "geheim")
-            client.openTimeline("!phase1-projekt:phase1.local")
-            client.sendMessage("!phase1-projekt:phase1.local", "Hallo Phase 1")
+            client.login("https://phase1.local", "alice", "secret")
+            client.openTimeline("!phase1-project:phase1.local")
+            client.sendMessage("!phase1-project:phase1.local", "Hello Phase 1")
         }
 
         val timeline = recorder.events.filterIsInstance<ChannelEvent.TimelineUpdated>().last()
-        expectTrue(timeline.messages.isNotEmpty(), "Chronik nicht leer")
+        expectTrue(timeline.messages.isNotEmpty(), "Timeline not empty")
         val sent = timeline.messages.last()
-        expectEquals("Hallo Phase 1", sent.body, "Nachrichtentext")
-        expectEquals(MessageDirection.OUTGOING, sent.direction, "Richtung")
+        expectEquals("Hello Phase 1", sent.body, "Message text")
+        expectEquals(MessageDirection.OUTGOING, sent.direction, "Direction")
         recorder.stop()
     }
 
-    Checks.check("Unbekannter Raum wird abgelehnt") {
+    Checks.check("Unknown room is rejected") {
         val client = InMemoryChannelClient(FakeSessionStore())
-        runBlocking { client.login("https://phase1.local", "alice", "geheim") }
+        runBlocking { client.login("https://phase1.local", "alice", "secret") }
         try {
-            runBlocking { client.openTimeline("!unbekannt:phase1.local") }
-            throw CheckFailure("ChannelException erwartet")
+            runBlocking { client.openTimeline("!unknown:phase1.local") }
+            throw CheckFailure("ChannelException expected")
         } catch (expected: ChannelException) {
-            expectTrue(expected.message!!.contains("Unbekannter Raum"), "Fehlermeldung")
+            expectTrue(expected.message!!.contains("Unknown room"), "error message")
         }
     }
 
-    Checks.check("Push-Endpoint-Registrierung ohne Sitzung wird abgelehnt") {
+    Checks.check("Push endpoint registration without session is rejected") {
         val client = InMemoryChannelClient(FakeSessionStore())
         try {
             runBlocking { client.registerPushEndpoint("https://push.phase1.local/endpoint") }
-            throw CheckFailure("ChannelException erwartet")
+            throw CheckFailure("ChannelException expected")
         } catch (expected: ChannelException) {
-            expectTrue(expected.message!!.contains("Keine aktive Sitzung"), "Fehlermeldung")
+            expectTrue(expected.message!!.contains("No active session"), "error message")
         }
     }
 
-    Checks.check("Abmeldung löscht Sitzung und Speicher") {
+    Checks.check("Logout clears session and store") {
         val store = FakeSessionStore()
         val client = InMemoryChannelClient(store)
         runBlocking {
-            client.login("https://phase1.local", "alice", "geheim")
+            client.login("https://phase1.local", "alice", "secret")
             client.logout()
         }
-        expectNull(client.activeSession, "Sitzung beendet")
-        expectEquals(1, store.clearCalls, "Speicher geleert")
-        expectNull(store.load(), "nichts geladen")
+        expectNull(client.activeSession, "Session ended")
+        expectEquals(1, store.clearCalls, "Store cleared")
+        expectNull(store.load(), "nothing loaded")
     }
 }

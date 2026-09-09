@@ -10,19 +10,19 @@ import java.util.UUID
 import org.junit.AssumptionViolatedException
 
 /**
- * Werkzeug für echte Matrix-E2E-Instrumentierungstests.
+ * Tool for real Matrix E2E instrumentation tests.
  *
- * Zugangsdaten kommen ausschließlich aus den Instrumentierungs-Argumenten, z. B.:
+ * Credentials come exclusively from the instrumentation arguments, e.g.:
  * `adb shell am instrument -e e2e.homeserver http://host:6167 -e e2e.username alice -e e2e.password …`
- * Fehlen sie, wird eine [AssumptionViolatedException] geworfen — der Test wird
- * dann übersprungen statt fehlschlagen. Kein Fake-Login, keine E2EE-Simulation.
+ * If they are missing, an [AssumptionViolatedException] is thrown — the test is
+ * then skipped instead of failing. No fake login, no E2EE simulation.
  *
- * Push-Trennung (Chunk C2b): Die Pusher-Gateway-Basis (`e2e.pusher_gateway`,
- * z. B. `http://kailink-e2e-ntfy` = Container-Sicht des Conduit-Containers auf
- * ntfy im geteilten Podman-Netz) ist die URL, die Conduit per HTTP aufruft.
- * Der aus Emulator-Sicht pruefbare ntfy-Cache laeuft weiter ueber
- * `requireGateway()` (adb reverse nach 127.0.0.1). Faellt das optionale
- * `e2e.pusher_gateway`-Argument weg, wird die Gateway-Basis verwendet.
+ * Push separation (Chunk C2b): the pusher gateway base (`e2e.pusher_gateway`,
+ * e.g. `http://kailink-e2e-ntfy` = the Conduit container's view of
+ * ntfy in the shared Podman network) is the URL that Conduit calls via HTTP.
+ * The ntfy cache verifiable from the emulator's point of view runs via
+ * `requireGateway()` (adb reverse to 127.0.0.1). If the optional
+ * `e2e.pusher_gateway` argument is absent, the gateway base is used.
  */
 class E2eHarness(
     private val arguments: Bundle = InstrumentationRegistry.getArguments(),
@@ -33,22 +33,22 @@ class E2eHarness(
     fun bobCredentials(): E2eCredentials = credentials("e2e.bob.username", "e2e.bob.password")
 
     fun requireHomeserver(): String = arguments.getString(ARG_HOMESERVER)?.trim()?.takeIf { it.isNotEmpty() }
-        ?: throw AssumptionViolatedException("e2e.homeserver fehlt")
+        ?: throw AssumptionViolatedException("e2e.homeserver is missing")
 
     /**
-     * HTTPS-Homeserver-Endpunkt für den TLS-Pfad-Test (rustls), z. B.
-     * `https://127.0.0.1:8443` (via adb reverse auf einen echten TLS-Server
-     * mit selbstsigniertem Zertifikat). Fehlt das Argument, wird der Test
-     * übersprungen statt fehlschlagen.
+     * HTTPS homeserver endpoint for the TLS path test (rustls), e.g.
+     * `https://127.0.0.1:8443` (via adb reverse to a real TLS server
+     * with a self-signed certificate). If the argument is missing, the test
+     * is skipped instead of failing.
      */
     fun tlsHomeserver(): String = arguments.getString(ARG_TLS_HOMESERVER)?.trim()?.takeIf { it.isNotEmpty() }
-        ?: throw AssumptionViolatedException("e2e.tls_homeserver fehlt")
+        ?: throw AssumptionViolatedException("e2e.tls_homeserver is missing")
 
-    /** Basis-URL des Matrix-Push-Gateways aus Conduit-Sicht (Container-Netz). */
+    /** Base URL of the Matrix push gateway from Conduit's point of view (container network). */
     fun pusherGatewayBase(): String =
         arguments.getString(ARG_PUSHER_GATEWAY)?.trim()?.takeIf { it.isNotEmpty() }
             ?: probeGateway()
-            ?: throw AssumptionViolatedException("e2e.pusher_gateway fehlt und kein Gateway erreichbar")
+            ?: throw AssumptionViolatedException("e2e.pusher_gateway is missing and no gateway reachable")
 
     private fun credentials(userKey: String, passwordKey: String): E2eCredentials {
         val homeserverUrl = requireHomeserver()
@@ -59,7 +59,7 @@ class E2eHarness(
         if (password.isEmpty()) missing.add(passwordKey)
         if (missing.isNotEmpty()) {
             throw AssumptionViolatedException(
-                "E2E-Zugangsdaten fehlen; Instrumentierungs-Argumente erforderlich: $missing",
+                "E2E credentials missing; instrumentation arguments required: $missing",
             )
         }
         return E2eCredentials(
@@ -79,11 +79,11 @@ class E2eHarness(
     fun requireGateway(timeoutMillis: Int = DEFAULT_TIMEOUT_MILLIS): String {
         return probeGateway(timeoutMillis)
             ?: throw AssumptionViolatedException(
-                "Kein Gateway erreichbar (Kandidaten: ${GATEWAY_CANDIDATES.joinToString()})",
+                "No gateway reachable (candidates: ${GATEWAY_CANDIDATES.joinToString()})",
             )
     }
 
-    /** GET mit Bearer-Token (fuer C2: GET /pushers gegen Conduit). */
+    /** GET with Bearer token (for C2: GET /pushers against Conduit). */
     fun httpGet(url: String, accessToken: String, timeoutMillis: Int = DEFAULT_TIMEOUT_MILLIS): String {
         val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
         try {
@@ -101,7 +101,7 @@ class E2eHarness(
         }
     }
 
-    /** GET ohne Auth als Text (fuer C2b: ntfy-Topic-Cache). */
+    /** GET without auth as text (for C2b: ntfy topic cache). */
     fun httpGetText(url: String, timeoutMillis: Int = 10_000): String {
         val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
         try {
@@ -144,7 +144,7 @@ class E2eHarness(
             connection.instanceFollowRedirects = true
             return connection.responseCode > 0
         } catch (t: Throwable) {
-            report("Gateway nicht erreichbar: $gatewayUrl (${t.message ?: t.javaClass.simpleName})")
+            report("Gateway not reachable: $gatewayUrl (${t.message ?: t.javaClass.simpleName})")
             return false
         } finally {
             connection.disconnect()
@@ -152,8 +152,8 @@ class E2eHarness(
     }
 
     companion object {
-        // 127.0.0.1 zuerst: via "adb reverse" auf den Devbox-Host getunnelt
-        // (Emulator-Loopback erreicht andernfalls nur den Emulator selbst).
+        // 127.0.0.1 first: tunneled to the devbox host via "adb reverse"
+        // (otherwise the emulator loopback only reaches the emulator itself).
         val GATEWAY_CANDIDATES = listOf(
             "http://127.0.0.1:8090",
             "http://10.0.2.2:8090",

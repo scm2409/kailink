@@ -1,45 +1,45 @@
-# Feature: Raumliste & Chronik (Timeline)
+# Feature: Room List & Timeline
 
-## Interaktionsmodell
+## Interaction Model
 
-- Nach dem Login zeigt die App die Raumliste (Anzeigename, 🔒-Badge bei
-  verschlüsselten Räumen, Vorschau der letzten Nachricht).
-- Antippen eines Raums öffnet die Chronik: Nachrichtenliste (ein-/ausgehend
-  visuell getrennt), unten ein Sendefeld; „Zurück" oder System-Zurück führt
-  zur Raumliste.
-- Senden leert das Feld; Sendefehler stellen den Entwurf wieder her.
+- After login the app shows the room list (display name, 🔒 badge for
+  encrypted rooms, preview of the last message).
+- Tapping a room opens the timeline: message list (incoming/outgoing
+  visually separated), a send field at the bottom; "Back" or system back
+  returns to the room list.
+- Sending clears the field; a send error restores the draft.
 
-## Implementierung (Phase 1)
+## Implementation (Phase 1)
 
-- Raumliste: `ChannelClient.rooms()` → `List<Room>` aus der
-  In-Memory-Simulation (zwei Demoräume, „Projektkanal Phase 1" mit
-  `isEncrypted = true`); Aktualisierung über `ChannelEvent.RoomsUpdated`
-  sowie direkt nach `syncOnce`/`refresh()`.
-- Chronik: `ChannelClient.openTimeline(roomId)` abonniert; Updates kommen
-  als `ChannelEvent.TimelineUpdated` (gefiltert nach Raum-ID im
-  ViewModel). Nachrichten werden im In-Memory-Speicher geführt.
-- Reduzier-Logik: `TimelineReducer.apply` (reine Domänenfunktion) ist die
-  feste Schnittstelle für Chronik-Zwischenstände — in Phase 1 durch die
-  JVM-Prüfungen abgedeckt, in Phase 2 vom SDK-Adapter gefüttert.
-- UI: Framework-Views (`ListView` + Adapter) statt Compose; die ViewModels
-  sind UI-unabhängig und für Compose wiederverwendbar.
+- Room list: `ChannelClient.rooms()` → `List<Room>` from the
+  in-memory simulation (two demo rooms, "Project Channel Phase 1" with
+  `isEncrypted = true`); updates via `ChannelEvent.RoomsUpdated`
+  and directly after `syncOnce`/`refresh()`.
+- Timeline: subscription via `ChannelClient.openTimeline(roomId)`; updates arrive
+  as `ChannelEvent.TimelineUpdated` (filtered by room ID in the
+  ViewModel). Messages are kept in the in-memory store.
+- Reducer logic: `TimelineReducer.apply` (pure domain function) is the
+  fixed interface for timeline intermediate states — covered in Phase 1 by
+  the JVM checks, fed in Phase 2 by the SDK adapter.
+- UI: framework Views (`ListView` + adapter) instead of Compose; the ViewModels
+  are UI-independent and reusable for Compose.
 
-## Phase-2-Ausblick
+## Phase-2 Outlook
 
-- `Client.rooms()` (SDK), `Room.timeline()` + `TimelineListener`: die
-  `TimelineDiff`-Folge wird in `TimelinePatch` übersetzt und an
-  `TimelineReducer` gegeben; Senden über die Send-Queue des SDK
-  (Verschlüsselung + Wiederholung inklusive).
+- `Client.rooms()` (SDK), `Room.timeline()` + `TimelineListener`: the
+  `TimelineDiff` sequence is translated into `TimelinePatch` and passed to
+  `TimelineReducer`; sending via the SDK's send queue
+  (encryption + retry included).
 
-## PoC-Grenzen
+## PoC Limits
 
-- Keine echte Netzwerkkommunikation; Inhalte leben nur im Speicher.
-- Kein unbegrenztes Nachladen (Backpagination), keine Medien, keine
-  Antworten/Threads, keine Lesebestätigungen.
+- No real network communication; content lives only in memory.
+- No unlimited paging (back-pagination), no media, no
+  replies/threads, no read receipts.
 
-## Verifikation
+## Verification
 
-V1: `RoomListViewModelChecks` (3), `TimelineViewModelChecks` (5) und
-`InMemoryChannelClientChecks` (6) — bestanden 2026-09-08, siehe
-[`verification.md`](verification.md). V4: manuelles Protokoll, Testfälle
-MT-3/MT-4/MT-5 (**nicht beobachtet**, kein Gerät).
+V1: `RoomListViewModelChecks` (3), `TimelineViewModelChecks` (5) and
+`InMemoryChannelClientChecks` (6) — passed 2026-09-08, see
+[`verification.md`](verification.md). V4: manual protocol, test cases
+MT-3/MT-4/MT-5 (**not observed**, no device).

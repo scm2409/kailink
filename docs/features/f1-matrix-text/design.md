@@ -1,16 +1,16 @@
 # f1-matrix-text – design.md
 
-Beteiligte Komponenten (Abhängigkeitsrichtung nur nach unten, siehe
+Involved components (dependency direction downward only, see
 `docs/architecture.md`):
 
-- `domain/ChannelClient` + `ChannelEvent` – Kanal-Nahtstelle (reines Kotlin).
-- `data/channel/InMemoryChannelClient` – Phase-1-Adapter: Sitzung, Räume,
-  Chronik und Senden im Speicher, Ereignisse über SharedFlow.
-- `domain/TimelineReducer` – reine Funktion für Chronik-Patches (Phase 2:
-  Übersetzung der SDK-`TimelineDiff`-Folge).
+- `domain/ChannelClient` + `ChannelEvent` – channel seam (pure Kotlin).
+- `data/channel/InMemoryChannelClient` – Phase-1 adapter: session, rooms,
+  timeline and sending in memory, events via SharedFlow.
+- `domain/TimelineReducer` – pure function for timeline patches (Phase 2:
+  translation of the SDK `TimelineDiff` sequence).
 - `ui/login/LoginViewModel`, `ui/rooms/RoomListViewModel`,
-  `ui/timeline/TimelineViewModel` – StateFlow-UiStates, injizierbarer Scope.
-- `MainActivity` – Framework-Views, drei umgeschaltete Screens.
+  `ui/timeline/TimelineViewModel` – StateFlow UiStates, injectable scope.
+- `MainActivity` – framework Views, three switched screens.
 
-Phase-2-Tausch: nur der Adapter in `AppGraph` ändert sich
-(`MatrixSdkChannelClient`, Referenz unter `app/src/phase2/`).
+Phase-2 swap: only the adapter in `AppGraph` changes
+(`MatrixSdkChannelClient`, reference under `app/src/phase2/`).

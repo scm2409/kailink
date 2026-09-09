@@ -11,15 +11,15 @@ import org.unifiedpush.android.connector.data.PushEndpoint
 import org.unifiedpush.android.connector.data.PushMessage
 
 /**
- * Android-Empfänger der UnifiedPush-Kette (siehe docs/features/push.md).
+ * Android receiver of the UnifiedPush chain (see docs/features/push.md).
  *
- * `onMessage` läuft goAsync-gesichert: Die Broadcast-Frist wird über
- * `goAsync()` gehalten, während eine Coroutine den echten Sync ausführt
- * (`ChannelClient.syncOnce()`), danach aus der zuletzt synchronisierten
- * Raumliste eine Benachrichtigung rendert ([PushNotifier] mit reinem
- * [PushNotificationPayload]). Der Zustandsautomat [PushController] bleibt
- * für Endpoint-/Fehlerereignisse zuständig; App-Logik und Domäne bleiben
- * Android-frei.
+ * `onMessage` is goAsync-guarded: the broadcast deadline is held via
+ * `goAsync()` while a coroutine performs the real sync
+ * (`ChannelClient.syncOnce()`), then renders a notification from the
+ * most recently synchronized room list ([PushNotifier] with the pure
+ * [PushNotificationPayload]). The state machine [PushController] remains
+ * responsible for endpoint/failure events; app logic and domain stay
+ * Android-free.
  */
 class KaiLinkPushReceiver : MessagingReceiver() {
 
@@ -32,11 +32,11 @@ class KaiLinkPushReceiver : MessagingReceiver() {
                 val client = graph.channelClient
                 client.syncOnce()
                 val rooms = runCatching { client.rooms() }
-                    .onFailure { Log.w(TAG, "Raumliste nach Push-Sync fehlgeschlagen: ${it.message}") }
+                    .onFailure { Log.w(TAG, "Room list after push sync failed: ${it.message}") }
                     .getOrDefault(emptyList())
                 PushNotificationPayload.fromLatest(rooms)?.let(notifier::show)
             } catch (t: Throwable) {
-                Log.w(TAG, "Push-Sync fehlgeschlagen: ${t.message}")
+                Log.w(TAG, "Push sync failed: ${t.message}")
             } finally {
                 pending.finish()
             }
@@ -45,9 +45,9 @@ class KaiLinkPushReceiver : MessagingReceiver() {
 
     override fun onNewEndpoint(context: Context, endpoint: PushEndpoint, instance: String) {
         val graph = graph(context) ?: return
-        // Endpoint-Rotation: jeder geänderte Endpoint wird erneut als
-        // Matrix-Pusher registriert (goAsync, damit der Prozess den Broadcast
-        // über die Registrierung hinweg behält).
+        // Endpoint rotation: every changed endpoint is registered again as a
+        // Matrix pusher (goAsync, so the process keeps the broadcast alive
+        // across the registration).
         val pending = goAsync()
         graph.appScope.launch {
             try {

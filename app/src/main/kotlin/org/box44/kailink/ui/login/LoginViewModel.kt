@@ -24,16 +24,16 @@ data class LoginUiState(
     val loggedIn: Boolean = false,
 ) {
     companion object {
-        /** Vorbelegter Standard-Homeserver (Anmeldeformular). */
+        /** Pre-filled default homeserver (login form). */
         const val DEFAULT_HOMESERVER_URL = "https://matrix.org"
     }
 }
 
 /**
- * Steuert Anmeldung und automatische Sitzungswiederherstellung
- * (docs/features/anmeldung-sitzung.md). Reine Kotlin-Klasse ohne
- * Android-/Lifecycle-Abhängigkeit; der CoroutineScope ist injizierbar,
- * damit JVM-Prüfungen deterministisch laufen.
+ * Controls sign-in and automatic session restore
+ * (docs/features/anmeldung-sitzung.md). Pure Kotlin class without
+ * Android-/Lifecycle dependencies; the CoroutineScope is injectable
+ * so that JVM checks run deterministically.
  */
 class LoginViewModel(
     private val channelClient: ChannelClient,
@@ -49,7 +49,7 @@ class LoginViewModel(
         val stored: Session? = sessionStore.load()
         if (stored != null) {
             _ui.update {
-                it.copy(busy = true, busyLabel = "Sitzung wird wiederhergestellt …", error = null)
+                it.copy(busy = true, busyLabel = "Restoring session …", error = null)
             }
             scope.launch {
                 try {
@@ -62,7 +62,7 @@ class LoginViewModel(
                         it.copy(
                             busy = false,
                             busyLabel = null,
-                            error = "Sitzung konnte nicht wiederhergestellt werden: ${t.message ?: "unbekannter Fehler"}",
+                            error = "Could not restore session: ${t.message ?: "unknown error"}",
                         )
                     }
                 }
@@ -78,10 +78,10 @@ class LoginViewModel(
         val state = _ui.value
         if (state.busy) return
         if (state.homeserverUrl.isBlank() || state.username.isBlank() || state.password.isBlank()) {
-            _ui.update { it.copy(error = "Bitte alle Felder ausfüllen.") }
+            _ui.update { it.copy(error = "Please fill in all fields.") }
             return
         }
-        _ui.update { it.copy(busy = true, busyLabel = "Anmeldung läuft …", error = null) }
+        _ui.update { it.copy(busy = true, busyLabel = "Signing in …", error = null) }
         scope.launch {
             try {
                 channelClient.login(state.homeserverUrl.trim(), state.username.trim(), state.password)
@@ -89,7 +89,7 @@ class LoginViewModel(
                 pushTrigger.tryRegister()
             } catch (t: Throwable) {
                 _ui.update {
-                    it.copy(busy = false, busyLabel = null, error = t.message ?: "Anmeldung fehlgeschlagen")
+                    it.copy(busy = false, busyLabel = null, error = t.message ?: "Sign-in failed")
                 }
             }
         }

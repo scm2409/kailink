@@ -6,15 +6,15 @@ import org.unifiedpush.android.connector.UnifiedPush
 import org.unifiedpush.android.connector.data.ResolvedDistributor
 
 /**
- * Phase-2-Ersatz für [SimulatedPushTrigger] (Grundsatz G5): Die Registrierung
- * läuft über den offiziellen UnifiedPush-Connector gegen einen Distributor
- * (z. B. ntfy). Der Zustandsautomat [PushController] bleibt identisch und
- * JVM-testbar; nur die Auslösung ist jetzt echt.
+ * Phase-2 replacement for [SimulatedPushTrigger] (principle G5): registration
+ * runs via the official UnifiedPush connector against a distributor
+ * (e.g. ntfy). The state machine [PushController] stays identical and
+ * JVM-testable; only the triggering is real now.
  *
- * Dokumentierte PoC-Grenze: Sind mehrere Distributoren installiert, aber noch
- * keiner gewählt, wählt der Registrar deterministisch den ersten gemeldeten
- * Distributor (eine nutzerfreundliche Auswahl läuft über die LinkActivity des
- * Connectors und ist bewusst nicht Teil des PoC).
+ * Documented PoC limitation: if several distributors are installed but none
+ * chosen yet, the registrar deterministically picks the first reported
+ * distributor (a user-friendly selection runs via the connector's
+ * LinkActivity and is deliberately not part of the PoC).
  */
 class UnifiedPushRegistrar(
     private val context: Context,

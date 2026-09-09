@@ -15,11 +15,11 @@ class KaiLinkApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // Muss vor der ersten Client-Konstruktion laufen (AppGraph baut den
-        // MatrixSdkChannelClient): initialisiert Tokio-Runtime und die
-        // rustls-platform-verifier JNI-Bridge (Element X: false, multithreaded).
-        // Ohne diesen Aufruf bricht jeder HTTPS-Handshake mit dem Panic
-        // "Expect rustls-platform-verifier to be initialized" ab.
+        // Must run before the first client construction (AppGraph builds the
+        // MatrixSdkChannelClient): initializes the Tokio runtime and the
+        // rustls-platform-verifier JNI bridge (Element X: false, multithreaded).
+        // Without this call every HTTPS handshake aborts with the panic
+        // "Expect rustls-platform-verifier to be initialized".
         try {
             initPlatform(
                 TracingConfiguration(
@@ -36,8 +36,8 @@ class KaiLinkApp : Application() {
             Log.e(TAG, "matrix-rust-sdk platform init failed", t)
         }
         graph = AppGraph(this)
-        // Benachrichtigungskanal früh anlegen (idempotent), damit er in den
-        // Systemeinstellungen erscheint, bevor der erste Push eintrifft.
+        // Create the notification channel early (idempotent) so it appears
+        // in the system settings before the first push arrives.
         PushNotifier(this).ensureChannel()
     }
 

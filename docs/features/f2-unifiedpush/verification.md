@@ -1,37 +1,40 @@
-# f2-unifiedpush – Verifikation
+# f2-unifiedpush – Verification
 
-## Beobachtet am 2026-09-08
+## Observed on 2026-09-08
 
 - `./gradlew testDebugUnitTest assembleDebug` → `BUILD SUCCESSFUL`.
-- `./scripts/e2e-local.sh` startete erfolgreich zwei rootless-Podman-Container:
-  `docker.io/matrixconduit/matrix-conduit:latest` und
+- `./scripts/e2e-local.sh` successfully started two rootless Podman containers:
+  `docker.io/matrixconduit/matrix-conduit:latest` and
   `docker.io/binwiederhier/ntfy:latest`.
-- Beobachtete Ausgaben:
+- Observed output (2026-09-08, verbatim; since the language migration to
+  English (G9) the script prints `E2E smoke passed: Matrix homeserver and
+  local ntfy reachable.` and `E2E registration passed: two disposable test
+  accounts created.`):
   - `E2E-Smoke bestanden: Matrix-Homeserver und lokales ntfy erreichbar.`
   - `E2E-Registrierung bestanden: zwei disposable Testkonten angelegt.`
-- Der Harness prüfte HTTP-Erreichbarkeit des Matrix-
-  `/_matrix/client/versions`-Endpoints, die ntfy-HTTP-Erreichbarkeit und die
-  Registrierung zweier kurzlebiger Konten.
+- The harness checked HTTP reachability of the Matrix
+  `/_matrix/client/versions` endpoint, ntfy HTTP reachability, and the
+  registration of two short-lived accounts.
 
-## Automatisiert bestanden
+## Passed Automatically
 
-- JVM-Prüfungen des Push-Zustandsautomaten.
-- Konfigurationsprüfung des Standard-Gateways
+- JVM checks of the push state machine.
+- Configuration check of the default gateway
   `https://ntfy.sh/_matrix/push/v1/notify`.
-- Prüfung der Endpoint-Rotation und erneuten Registrierung auf Vertragsebene.
-- Start und HTTP-Smoke-Test der lokalen Matrix-/ntfy-Infrastruktur.
+- Check of endpoint rotation and re-registration at the contract level.
+- Start and HTTP smoke test of the local Matrix/ntfy infrastructure.
 
-## Nicht durch den lokalen Harness abgedeckt
+## Not Covered by the Local Harness
 
-Der Shell-Harness besitzt keine Android-Runtime und keinen UnifiedPush-
-Distributor. Deshalb wurden die tatsächliche Connector-Distributor-Auswahl,
-Topic-Auslieferung, Matrix-HTTP-Pusher-Registrierung gegen den Testserver,
-Push-Wake, SDK-Sync, E2EE-Entschlüsselung und Android-Notification nicht als
-lokal bestanden behauptet.
+The shell harness has no Android runtime and no UnifiedPush
+distributor. Therefore the actual connector distributor selection,
+topic delivery, Matrix HTTP pusher registration against the test server,
+push wake, SDK sync, E2EE decryption, and Android notification were not
+claimed as locally passed.
 
-## Manuell auf dem Gerät
+## Manually on the Device
 
-Auf Martins GrapheneOS-Gerät sind Distributor-Auswahl, Endpoint-Rotation,
-Push-Sync und Notification zu prüfen. Die Runtime-Berechtigung
-`POST_NOTIFICATIONS` und die Emoji-Verifikation in Element X sind ebenfalls
-manuell. Reale matrix.org-Zugangsdaten werden nicht im Harness verwendet.
+On Martin's GrapheneOS device, distributor selection, endpoint rotation,
+push sync, and notification are to be checked. The runtime permission
+`POST_NOTIFICATIONS` and emoji verification in Element X are also
+manual. Real matrix.org credentials are not used in the harness.

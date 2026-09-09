@@ -14,12 +14,12 @@ fun expectFalse(condition: Boolean, message: String) {
 
 fun <T> expectEquals(expected: T, actual: T, message: String) {
     if (expected != actual) {
-        throw CheckFailure("$message — erwartet: $expected, ist: $actual")
+        throw CheckFailure("$message — expected: $expected, actual: $actual")
     }
 }
 
 fun expectNull(value: Any?, message: String) {
-    if (value != null) throw CheckFailure("$message — erwartet: null, ist: $value")
+    if (value != null) throw CheckFailure("$message — expected: null, actual: $value")
 }
 
 fun expectNotNull(value: Any?, message: String) {
@@ -27,9 +27,9 @@ fun expectNotNull(value: Any?, message: String) {
 }
 
 /**
- * Minimaler Prüf-Runner für die Offline-Umgebung: JUnit ist im lokalen
- * Repository-Cache nicht vorhanden, daher läuft die JVM-Verifikation (V1)
- * über diese Prüfungen als eigene Gradle-Aufgabe (`phase1Checks`).
+ * Minimal check runner for the offline environment: JUnit is not available
+ * in the local repository cache, therefore the JVM verification (V1) runs
+ * via these checks as a dedicated Gradle task (`phase1Checks`).
  */
 object Checks {
 
@@ -41,28 +41,28 @@ object Checks {
         try {
             body()
             passedCount++
-            lines += "[OK]      $name"
+            lines += "[OK]        $name"
         } catch (t: Throwable) {
-            val message = t.message ?: t::class.simpleName ?: "unbekannter Fehler"
+            val message = t.message ?: t::class.simpleName ?: "unknown error"
             failures += "$name — $message"
-            lines += "[FEHLER]  $name — $message"
+            lines += "[ERROR]  $name — $message"
         }
     }
 
     fun finish(reportPath: String) {
         val total = passedCount + failures.size
-        val summary = "Prüfungen: $total, bestanden: $passedCount, fehlgeschlagen: ${failures.size}"
+        val summary = "Checks: $total, passed: $passedCount, failed: ${failures.size}"
         lines += ""
         lines += summary
-        failures.forEach { lines += "  BETROFFEN: $it" }
+        failures.forEach { lines += "  AFFECTED: $it" }
         val report = File(reportPath)
         report.parentFile?.mkdirs()
         report.writeText(lines.joinToString(System.lineSeparator()) + System.lineSeparator())
         println()
         println(summary)
-        println("Bericht: ${report.absolutePath}")
+        println("Report: ${report.absolutePath}")
         if (failures.isNotEmpty()) {
-            throw CheckFailure("Phase-1-Prüfungen fehlgeschlagen (${failures.size} von $total). Siehe Bericht.")
+            throw CheckFailure("Phase-1 checks failed (${failures.size} of $total). See report.")
         }
     }
 }

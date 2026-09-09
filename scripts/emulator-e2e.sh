@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Zwei-Konten-Matrix-E2E auf dem Emulator (Chunk A + B) + echter TLS-Pfad-Test.
-# EIN Befehl = reproduzierbarer Lauf: Conduit+ntfy+nginx-TLS, adb reverse,
-# Konten, beide APKs, am instrument mit dem Zwei-Konten-Test und dem
-# TLS-Login-Test (rustls gegen https://127.0.0.1:8443, selbstsigniertes
-# Zertifikat — Erwartung: TLS-/Zertifikatsfehler, NICHT der
-# Initialisierungs-Panic).
-# Voraussetzung: Emulator kailink-atd35 laeuft (emulator-5554).
+# Two-account Matrix E2E on the emulator (Chunk A + B) + real TLS path test.
+# ONE command = reproducible run: Conduit+ntfy+nginx-TLS, adb reverse,
+# accounts, both APKs, am instrument with the two-account test and the
+# TLS login test (rustls against https://127.0.0.1:8443, self-signed
+# certificate — expectation: TLS/certificate error, NOT the
+# initialization panic).
+# Prerequisite: emulator kailink-atd35 is running (emulator-5554).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DEV_ANDROID_HOME="/home/dev/android-sdk"
@@ -23,16 +23,16 @@ ALICE_PASS="${E2E_ALICE_PASS:-phase1-e2e-alice}"
 BOB_USER="${E2E_BOB_USER:-kailink_bob}"
 BOB_PASS="${E2E_BOB_PASS:-phase1-e2e-bob}"
 
-[[ -x "$ADB" ]] || { echo "ADB fehlt: $ADB" >&2; exit 2; }
-"$ADB" -s "$DEVICE" get-state >/dev/null || { echo "Emulator nicht erreichbar: $DEVICE" >&2; exit 2; }
+[[ -x "$ADB" ]] || { echo "ADB missing: $ADB" >&2; exit 2; }
+"$ADB" -s "$DEVICE" get-state >/dev/null || { echo "Emulator not reachable: $DEVICE" >&2; exit 2; }
 
-echo "[1/6] Container-Images (Digest ins Log)"
+echo "[1/6] Container images (digest into the log)"
 podman pull "$CONDUIT_IMAGE" >/dev/null
 podman pull "$NTFY_IMAGE" >/dev/null
 podman pull "$NGINX_IMAGE" >/dev/null
 podman images --digests 2>/dev/null | grep -E "conduit|ntfy|nginx" || podman images 2>/dev/null | grep -E "conduit|ntfy|nginx" || true
 
-echo "[2/6] Conduit + ntfy + nginx-TLS-Proxy starten (geteiltes Netz: $NETWORK)"
+echo "[2/6] Starting Conduit + ntfy + nginx TLS proxy (shared network: $NETWORK)"
 podman network create "$NETWORK" >/dev/null 2>&1 || true
 podman rm -f kailink-e2e-conduit kailink-e2e-ntfy kailink-e2e-tls >/dev/null 2>&1 || true
 CONFIG_FILE="$(mktemp)"
@@ -41,9 +41,9 @@ CERT_DIR="$(mktemp -d)"
 cleanup_cfg() { rm -f "$CONFIG_FILE" "$NGINX_CONF"; rm -rf "$CERT_DIR"; }
 trap cleanup_cfg EXIT
 printf '%s\n' '[global]' 'server_name = "localhost"' 'database_path = "/var/lib/conduit"' 'database_backend = "rocksdb"' 'address = "0.0.0.0"' 'port = 6167' 'allow_registration = true' > "$CONFIG_FILE"
-# Selbstsigniertes Zertifikat mit SAN fuer den Endpunkt, unter dem der
-# Emulator den Server erreicht (Hostname-Check laeuft durch, die
-# Vertrauenspruefung scheitert — genau der zu pruefende TLS-Pfad).
+# Self-signed certificate with a SAN for the endpoint under which the
+# emulator reaches the server (the hostname check passes, the
+# trust check fails — exactly the TLS path to be tested).
 openssl req -x509 -newkey rsa:2048 -keyout "$CERT_DIR/server.key" -out "$CERT_DIR/server.crt" \
   -days 3 -nodes -subj "/CN=127.0.0.1" \
   -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
@@ -65,35 +65,35 @@ for _ in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:$CONDUIT_PORT/_matrix/client/versions" >/dev/null 2>&1; then READY=true; break; fi
   sleep 2
 done
-if [[ "$READY" != true ]]; then echo "Conduit wurde nicht bereit." >&2; podman logs kailink-e2e-conduit >&2; exit 1; fi
+if [[ "$READY" != true ]]; then echo "Conduit did not become ready." >&2; podman logs kailink-e2e-conduit >&2; exit 1; fi
 curl -fsS "http://127.0.0.1:$NTFY_PORT/" >/dev/null
 TLS_READY=false
 for _ in $(seq 1 30); do
-  # curl -k: dem selbstsignierten Zertifikat vertraut nur der Test, nie der Client.
+  # curl -k: only the test trusts the self-signed certificate, never the client.
   if curl -kfsS "https://127.0.0.1:$TLS_PORT/_matrix/client/versions" >/dev/null 2>&1; then TLS_READY=true; break; fi
   sleep 2
 done
-if [[ "$TLS_READY" != true ]]; then echo "nginx-TLS-Proxy wurde nicht bereit." >&2; podman logs kailink-e2e-tls >&2; exit 1; fi
-echo "Conduit + ntfy + TLS-Proxy bereit (Ports $CONDUIT_PORT/$NTFY_PORT/$TLS_PORT)."
+if [[ "$TLS_READY" != true ]]; then echo "nginx TLS proxy did not become ready." >&2; podman logs kailink-e2e-tls >&2; exit 1; fi
+echo "Conduit + ntfy + TLS proxy ready (ports $CONDUIT_PORT/$NTFY_PORT/$TLS_PORT)."
 
-echo "[3/6] adb reverse (Emulator-Netz defekt; Tunnel statt 10.0.2.2)"
+echo "[3/6] adb reverse (emulator network broken; tunnel instead of 10.0.2.2)"
 "$ADB" -s "$DEVICE" reverse "tcp:6167" "tcp:$CONDUIT_PORT"
 "$ADB" -s "$DEVICE" reverse "tcp:8090" "tcp:$NTFY_PORT"
 "$ADB" -s "$DEVICE" reverse "tcp:8443" "tcp:$TLS_PORT"
 "$ADB" -s "$DEVICE" reverse --list
 
-echo "[4/6] Wegwerf-Konten registrieren (bereits vorhandene sind ok)"
+echo "[4/6] Registering throwaway accounts (already existing is ok)"
 register_user() { curl -fsS -X POST "http://127.0.0.1:$CONDUIT_PORT/_matrix/client/v3/register" -H 'content-type: application/json' -d "{\"username\":\"$1\",\"password\":\"$2\",\"auth\":{\"type\":\"m.login.dummy\"}}" >/dev/null 2>&1 || true; }
 register_user "$ALICE_USER" "$ALICE_PASS"
 register_user "$BOB_USER" "$BOB_PASS"
-echo "Konten bereit: $ALICE_USER, $BOB_USER."
+echo "Accounts ready: $ALICE_USER, $BOB_USER."
 
-echo "[5/6] APKs bauen + installieren"
+echo "[5/6] Building + installing APKs"
 ./gradlew :app:assembleEmulatorDebug :app:assembleDebugAndroidTest --offline
 "$ADB" -s "$DEVICE" install -r app/build/outputs/apk/emulatorDebug/app-emulatorDebug.apk
 "$ADB" -s "$DEVICE" install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 
-echo "[6/6] Zwei-Konten-E2E (Chunk A + Chunk B + Restore-Leg) + TLS-Pfad-Test"
+echo "[6/6] Two-account E2E (Chunk A + Chunk B + restore leg) + TLS path test"
 "$ADB" -s "$DEVICE" shell am instrument -w -r \
   -e debug false \
   -e class 'org.box44.kailink.MatrixE2eTest#twoAccountTimelineDeliveryUnencrypted,org.box44.kailink.TlsE2eTest#rustlsLoginOverHttpsFailsWithTlsErrorNotInitPanic' \

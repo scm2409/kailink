@@ -20,22 +20,22 @@ import org.matrix.rustcomponents.sdk.ClientException
 import org.matrix.rustcomponents.sdk.InternalException
 
 /**
- * Echter TLS-Pfad-Test (Goal B): Anmeldung ueber rustls gegen einen echten
- * HTTPS-Endpunkt (`e2e.tls_homeserver`, z. B. https://127.0.0.1:8443 via
- * adb reverse auf einen nginx-TLS-Proxy vor Conduit mit selbstsigniertem
- * Zertifikat).
+ * Real TLS path test (Goal B): sign-in via rustls against a real
+ * HTTPS endpoint (`e2e.tls_homeserver`, e.g. https://127.0.0.1:8443 via
+ * adb reverse to an nginx TLS proxy in front of Conduit with a self-signed
+ * certificate).
  *
- * Streng g_assertiert wird:
- * 1. Die Anmeldung scheitert (das selbstsignierte Zertifikat kann vom
- *    Platform-Verifier nie vertrauenswuerdig sein) — aber als sauberer
- *    ClientException-Fehler, nicht als Panic.
- * 2. Der Fehler ist TLS-/Zertifikats-/Hostname-bezogen (Whitelist von
- *    TLS-Markern inkl. der UniFFI-Debug-Details-Kette).
- * 3. Der Fehler ist NICHT der Initialisierungs-Panic
- *    ("Expect rustls-platform-verifier to be initialized") und auch nicht
- *    die vom Adapter eingefuegte Ersatzmeldung dafuer.
- * 4. Die vendored Klasse org.rustls.platformverifier.CertificateVerifier
- *    liegt im Klassenpfad und ist mit BuildConfig.TEST=false gebaut.
+ * Strictly asserted:
+ * 1. The sign-in fails (the self-signed certificate can never be trusted by
+ *    the platform verifier) — but as a clean
+ *    ClientException error, not as a panic.
+ * 2. The error is TLS/certificate/hostname related (whitelist of
+ *    TLS markers including the UniFFI debug details chain).
+ * 3. The error is NOT the initialization panic
+ *    ("Expect rustls-platform-verifier to be initialized") and also not
+ *    the replacement message inserted by the adapter.
+ * 4. The vendored class org.rustls.platformverifier.CertificateVerifier
+ *    is on the classpath and built with BuildConfig.TEST=false.
  */
 @RunWith(AndroidJUnit4::class)
 class TlsE2eTest {
@@ -47,14 +47,14 @@ class TlsE2eTest {
         val creds = harness.aliceCredentials()
         harness.report("TLS-E2E: tlsHomeserver=$tlsHomeserver")
 
-        // 4. Vendored Platform-Verifier-Klasse muss erreichbar sein.
+        // 4. Vendored platform verifier class must be reachable.
         val verifierClass = try {
             Class.forName("org.rustls.platformverifier.CertificateVerifier")
         } catch (t: Throwable) {
-            fail("org.rustls.platformverifier.CertificateVerifier fehlt im Klassenpfad: $t")
+            fail("org.rustls.platformverifier.CertificateVerifier missing from the classpath: $t")
             throw t
         }
-        harness.report("TLS-E2E: CertificateVerifier geladen: ${verifierClass.name}")
+        harness.report("TLS-E2E: CertificateVerifier loaded: ${verifierClass.name}")
 
         val dirs = harness.newStoreDirs("tls")
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -76,16 +76,16 @@ class TlsE2eTest {
             }
 
             assertNotNull(
-                "Login gegen $tlsHomeserver musste am selbstsignierten Zertifikat scheitern — " +
-                    "erfolgreicher Login bedeutet, der TLS-Pfad wurde nicht echt geprueft",
+                "Login against $tlsHomeserver had to fail on the self-signed certificate — " +
+                    "a successful login means the TLS path was not really verified",
                 failure,
             )
             val t = failure!!
 
-            // Vollstaendige Kette inkl. UniFFI-Debug-Details (getMessage()
-            // von ClientException enthaelt msg=…, details=… mit der Rust-
-            // Fehlerkette) und Ursachen (der Adapter haengt das Original als
-            // cause an, auch wenn er den Panic textlich ersetzt).
+            // Complete chain including UniFFI debug details (getMessage()
+            // of ClientException contains msg=…, details=… with the Rust
+            // error chain) and causes (the adapter attaches the original as
+            // cause, even when it replaces the panic textually).
             val chain = buildString {
                 var current: Throwable? = t
                 while (current != null) {
@@ -93,38 +93,38 @@ class TlsE2eTest {
                     current = current.cause
                 }
             }
-            harness.report("TLS-E2E: Fehlerkette:\n$chain")
+            harness.report("TLS-E2E: error chain:\n$chain")
 
-            // 1. Sauberer Adapter-/SDK-Fehler, kein roher UniFFI-Panic.
+            // 1. Clean adapter/SDK error, no raw UniFFI panic.
             assertTrue(
-                "Erwartet ChannelException, erhalten: ${t.javaClass.name}",
+                "Expected ChannelException, got: ${t.javaClass.name}",
                 t is ChannelException,
             )
             assertTrue(
-                "Ursache muss eine ClientException des SDK sein, erhalten: ${t.cause?.javaClass?.name}",
+                "Cause must be an SDK ClientException, got: ${t.cause?.javaClass?.name}",
                 t.cause is ClientException,
             )
             assertFalse(
-                "UniFFI-Panic-Carrier InternalException darf nicht in der Ursachenkette auftreten",
+                "UniFFI panic carrier InternalException must not appear in the cause chain",
                 t.cause is InternalException,
             )
 
-            // 2. NICHT der Initialisierungsfehler (weder roher Panic noch
-            //    vom Adapter maskierte Ersatzmeldung).
+            // 2. NOT the initialization error (neither raw panic nor
+            //    adapter-masked replacement message).
             assertFalse(
-                "Initialisierungs-Panic ist aufgetreten (rustls-platform-verifier wurde nicht per initPlatform initialisiert):\n$chain",
+                "Initialization panic occurred (rustls-platform-verifier was not initialized via initPlatform):\n$chain",
                 chain.contains("rustls-platform-verifier"),
             )
             assertFalse(
-                "Der TLS-Init-Ersatztext des Adapters darf hier nicht erscheinen (bedeutet maskierten Initialisierungs-Panic):\n$chain",
+                "The adapter's TLS-init replacement text must not appear here (means a masked initialization panic):\n$chain",
                 chain.contains(TLS_INIT_REPLACEMENT_MARKER),
             )
 
-            // 3. TLS-/Zertifikats-/Hostname-bezogen (Whitelist, strikt).
+            // 3. TLS/certificate/hostname related (whitelist, strict).
             val lower = chain.lowercase()
             val matched = TLS_MARKERS.filter { lower.contains(it) }
             assertTrue(
-                "Fehler ist nicht TLS-/Zertifikats-/Hostname-bezogen (keiner der Marker $TLS_MARKERS in der Fehlerkette):\n$chain",
+                "Error is not TLS/certificate/hostname related (none of the markers $TLS_MARKERS in the error chain):\n$chain",
                 matched.isNotEmpty(),
             )
             harness.report("TLS-E2E ok: TLS-Marker gefunden: $matched")
@@ -136,8 +136,8 @@ class TlsE2eTest {
     }
 
     companion object {
-        // Marker, die nur bei echtem TLS-/Zertifikats-/Hostname-Versagen
-        // vorkommen (Rust-Fehlerkette inkl. UniFFI-Debug-Details).
+        // Markers that only occur with real TLS/certificate/hostname failure
+        // (Rust error chain including UniFFI debug details).
         private val TLS_MARKERS = listOf(
             "invalid peer certificate",
             "unknownissuer",
@@ -147,8 +147,8 @@ class TlsE2eTest {
             "tls",
         )
 
-        // Teil des Ersatztexts aus MatrixSdkChannelClient.readableFailure —
-        // taucht hier nur auf, wenn ein Initialisierungs-Panic maskiert wurde.
-        private const val TLS_INIT_REPLACEMENT_MARKER = "TLS-Verifizierung"
+        // Part of the replacement text from MatrixSdkChannelClient.readableFailure —
+        // appears here only if an initialization panic was masked.
+        private const val TLS_INIT_REPLACEMENT_MARKER = "TLS verification"
     }
 }

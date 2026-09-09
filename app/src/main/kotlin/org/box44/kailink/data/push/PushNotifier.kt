@@ -13,15 +13,15 @@ import org.box44.kailink.MainActivity
 import org.box44.kailink.R
 
 /**
- * Android-seitiges Rendern von Push-Benachrichtigungen (kompiliert hier,
- * Verhalten nur auf Gerät beobachtbar — siehe docs/features/push.md).
+ * Android-side rendering of push notifications (compiled here,
+ * behavior observable only on device — see docs/features/push.md).
  *
- * Die Nutzdaten ([PushNotificationPayload]) sind rein und JVM-getestet;
- * diese Klasse enthält nur die dünne Android-Übersetzung:
- * - Benachrichtigungskanal (idempotent, einmal pro Prozess nötig),
- * - POST_NOTIFICATIONS-Prüfung (ab API 33; Manifest-Berechtigung deklariert,
- *   Nutzerfreigabe zur Laufzeit ist Gerätethema),
- * - Benachrichtigung mit Tap-Intent in die [MainActivity].
+ * The payload ([PushNotificationPayload]) is pure and JVM-tested;
+ * this class contains only the thin Android translation:
+ * - notification channel (idempotent, needed once per process),
+ * - POST_NOTIFICATIONS check (API 33+; manifest permission declared,
+ *   runtime user consent is a device concern),
+ * - notification with tap intent into [MainActivity].
  */
 class PushNotifier(private val context: Context) {
 
@@ -37,7 +37,7 @@ class PushNotifier(private val context: Context) {
         manager.createNotificationChannel(channel)
     }
 
-    /** Zeigt die Benachrichtigung; ohne Berechtigung (API 33+) still kein-op. */
+    /** Shows the notification; without permission (API 33+) a silent no-op. */
     fun show(payload: PushNotificationPayload) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=

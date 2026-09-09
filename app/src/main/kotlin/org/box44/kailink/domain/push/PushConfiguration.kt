@@ -1,22 +1,22 @@
 package org.box44.kailink.domain.push
 
 /**
- * Reine Konfiguration der Push-Kette (keine Android-/SDK-Typen, JVM-testbar).
+ * Pure configuration of the push chain (no Android/SDK types, JVM-testable).
  *
- * Die Matrix-Pusher-Registrierung trennt zwei Adressen (siehe Matrix
- * Push-Gateway-Spezifikation):
- * - `endpoint` (UnifiedPush-Endpoint des Distributors) wird als
- *   `PusherIdentifiers.pushkey` angemeldet,
- * - `gatewayUrl` ist die URL des Matrix-Push-Gateways (z. B. ntfy), das die
- *   Push-Nachricht in UnifiedPush übersetzt, und wird als
- *   `HttpPusherData.url` angemeldet.
+ * The Matrix pusher registration separates two addresses (see the Matrix
+ * Push Gateway specification):
+ * - `endpoint` (the distributor's UnifiedPush endpoint) is registered as
+ *   `PusherIdentifiers.pushkey`,
+ * - `gatewayUrl` is the URL of the Matrix push gateway (e.g. ntfy) that
+ *   translates the push message into UnifiedPush, and is registered as
+ *   `HttpPusherData.url`.
  */
 data class PushConfiguration(
     val gatewayUrl: String = DEFAULT_GATEWAY_URL,
     val appId: String = DEFAULT_APP_ID,
 ) {
     companion object {
-        /** Standard-Gateway des PoC: ntfys eingebauter Matrix-Push-Endpoint. */
+        /** PoC default gateway: ntfy's built-in Matrix push endpoint. */
         const val DEFAULT_GATEWAY_URL = "https://ntfy.sh/_matrix/push/v1/notify"
 
         const val DEFAULT_APP_ID = "org.box44.kailink"

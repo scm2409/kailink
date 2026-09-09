@@ -13,7 +13,7 @@ fun roomListViewModelChecks() {
 
     fun viewModelScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
 
-    Checks.check("refresh stößt Sync und Raumliste an") {
+    Checks.check("refresh triggers sync and room list") {
         val client = FakeChannelClient()
         val viewModel = RoomListViewModel(
             client,
@@ -25,18 +25,18 @@ fun roomListViewModelChecks() {
 
         viewModel.refresh()
 
-        expectTrue(client.syncOnceCalls > syncBefore, "syncOnce erneut ausgelöst")
+        expectTrue(client.syncOnceCalls > syncBefore, "syncOnce triggered again")
         expectEquals(liveSyncBefore + 1, client.startLiveSyncCalls, "startLiveSync")
         expectEquals(
             listOf(TEST_ROOM.id),
             viewModel.ui.value.rooms.map { it.id },
-            "Raumliste",
+            "Room list",
         )
-        expectTrue(viewModel.ui.value.rooms.first().isEncrypted, "verschlüsselt-Markierung")
+        expectTrue(viewModel.ui.value.rooms.first().isEncrypted, "encrypted marker")
         viewModel.clear()
     }
 
-    Checks.check("RoomsUpdated-Ereignis aktualisiert den Zustand") {
+    Checks.check("RoomsUpdated event updates the state") {
         val client = FakeChannelClient()
         val viewModel = RoomListViewModel(
             client,
@@ -49,13 +49,13 @@ fun roomListViewModelChecks() {
         expectEquals(
             listOf(TEST_ROOM.id),
             viewModel.ui.value.rooms.map { it.id },
-            "Raumliste nach Ereignis",
+            "Room list after event",
         )
-        expectEquals(false, viewModel.ui.value.refreshing, "refreshing zurückgesetzt")
+        expectEquals(false, viewModel.ui.value.refreshing, "refreshing reset")
         viewModel.clear()
     }
 
-    Checks.check("Abmeldung wird an den Client delegiert") {
+    Checks.check("Logout is delegated to the client") {
         val client = FakeChannelClient()
         val viewModel = RoomListViewModel(
             client,
@@ -65,7 +65,7 @@ fun roomListViewModelChecks() {
 
         viewModel.logout()
 
-        expectEquals(1, client.logoutCalls, "logout-Aufrufe")
+        expectEquals(1, client.logoutCalls, "logout calls")
         viewModel.clear()
     }
 }

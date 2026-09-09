@@ -3,8 +3,8 @@ package org.box44.kailink.testing
 import org.junit.Test
 
 /**
- * JUnit-Hülle um die JVM-Prüfungen: [runAllChecks] wirft bei Fehlschlägen
- * eine [CheckFailure], sodass `testDebugUnitTest` rot färbt.
+ * JUnit wrapper around the JVM checks: on failures [runAllChecks] throws
+ * a [CheckFailure], so `testDebugUnitTest` turns red.
  */
 class AllChecksTest {
 

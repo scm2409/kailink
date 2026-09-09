@@ -12,7 +12,7 @@ import org.box44.kailink.domain.model.DeliveryState
 import org.box44.kailink.domain.model.Message
 import org.box44.kailink.domain.model.MessageDirection
 
-/** Zeilen-Adapter für die Chronik (Framework-Views, keine externen UI-Libs). */
+/** Row adapter for the timeline (framework views, no external UI libraries). */
 class MessageListAdapter(private val context: Context) : BaseAdapter() {
 
     private var messages: List<Message> = emptyList()

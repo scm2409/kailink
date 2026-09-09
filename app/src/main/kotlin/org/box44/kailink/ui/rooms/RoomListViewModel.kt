@@ -22,10 +22,10 @@ data class RoomListUiState(
 )
 
 /**
- * Raumliste; aktualisiert sich aus [ChannelEvent.RoomsUpdated] und nach
- * `syncOnce` (docs/features/raumliste-chronik.md). Reine Kotlin-Klasse;
- * der Push-Zustand wird als StateFlow injiziert, damit `ui/` keine
- * data-Typen kennt.
+ * Room list; updates from [ChannelEvent.RoomsUpdated] and after
+ * `syncOnce` (docs/features/raumliste-chronik.md). Pure Kotlin class;
+ * the push state is injected as a StateFlow so that `ui/` does not know
+ * data types.
  */
 class RoomListViewModel(
     private val channelClient: ChannelClient,
@@ -36,7 +36,7 @@ class RoomListViewModel(
     private val _ui = MutableStateFlow(RoomListUiState())
     val ui: StateFlow<RoomListUiState> = _ui.asStateFlow()
 
-    /** Push-Zustand der Push-Registrierung (Anzeige in der Liste). */
+    /** Push state of the push registration (display in the list). */
     val pushState: StateFlow<PushState> = pushState
 
     init {
@@ -66,7 +66,7 @@ class RoomListViewModel(
                 _ui.update { it.copy(rooms = channelClient.rooms(), refreshing = false) }
             } catch (t: Throwable) {
                 _ui.update {
-                    it.copy(refreshing = false, error = t.message ?: "Aktualisierung fehlgeschlagen")
+                    it.copy(refreshing = false, error = t.message ?: "Refresh failed")
                 }
             }
         }
@@ -77,7 +77,7 @@ class RoomListViewModel(
             try {
                 channelClient.logout()
             } catch (t: Throwable) {
-                _ui.update { it.copy(error = "Abmeldung fehlgeschlagen: ${t.message}") }
+                _ui.update { it.copy(error = "Sign-out failed: ${t.message}") }
             }
         }
     }

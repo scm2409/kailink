@@ -1,10 +1,10 @@
 package org.box44.kailink.testing
 
 /**
- * Führt sämtliche JVM-Prüfungen (V1) aus und schreibt den Bericht
- * (build/reports/phase1-checks.txt). Einstiegspunkt für die gewöhnliche
- * JUnit-Aufgabe (`testDebugUnitTest`, siehe AllChecksTest) sowie optional
- * für `main()` über JavaExec.
+ * Runs all JVM checks (V1) and writes the report
+ * (build/reports/phase1-checks.txt). Entry point for the ordinary
+ * JUnit task (`testDebugUnitTest`, see AllChecksTest) as well as optionally
+ * for `main()` via JavaExec.
  */
 fun runAllChecks() {
     timelineReducerChecks()

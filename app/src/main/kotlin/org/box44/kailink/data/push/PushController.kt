@@ -9,9 +9,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * JVM-seitiger Zustandsautomat der Push-Kette (ohne Android-Abhängigkeit,
- * JVM-testbar). Der Android-Empfänger (`KaiLinkPushReceiver`) und der
- * `UnifiedPushRegistrar` rufen hier ein; die Aktionen laufen gegen den
+ * JVM-side state machine of the push chain (no Android dependency,
+ * JVM-testable). The Android receiver (`KaiLinkPushReceiver`) and the
+ * `UnifiedPushRegistrar` call into it; actions run against the
  * [ChannelClient].
  */
 class PushController(
@@ -23,26 +23,26 @@ class PushController(
     private val _state = MutableStateFlow(PushState.NOT_AVAILABLE)
     val state: StateFlow<PushState> = _state.asStateFlow()
 
-    /** Zuletzt erfolgreich am Kanal registrierter Endpoint (für Rotation). */
+    /** Last endpoint successfully registered at the channel (for rotation). */
     @Volatile
     var lastRegisteredEndpoint: String? = null
         private set
 
-    /** Distributor gefunden; die eigentliche Registrierung läuft asynchron. */
+    /** Distributor found; the actual registration runs asynchronously. */
     fun onDistributorAvailable() {
         _state.value = PushState.READY
     }
 
-    /** Kein Distributor installiert — Push bleibt deaktiviert, App nutzbar. */
+    /** No distributor installed — push stays disabled, app remains usable. */
     fun onNoDistributor() {
         _state.value = PushState.NOT_AVAILABLE
     }
 
     /**
-     * UnifiedPush hat einen neuen (ggf. rotierten) Endpoint geliefert.
-     * Jeder geänderte Endpoint wird erneut registriert (Re-Registration);
-     * die Registrierung läuft gegen die Kanalschicht und hält bei Erfolg
-     * [lastRegisteredEndpoint] aktuell.
+     * UnifiedPush delivered a new (possibly rotated) endpoint.
+     * Every changed endpoint is registered again (re-registration);
+     * the registration runs against the channel layer and keeps
+     * [lastRegisteredEndpoint] up to date on success.
      */
     fun onNewEndpoint(endpointUrl: String) {
         _state.value = PushState.READY
@@ -51,32 +51,32 @@ class PushController(
                 channelClient.registerPushEndpoint(endpointUrl)
                 lastRegisteredEndpoint = endpointUrl
                 _state.value = PushState.REGISTERED
-                onLog("Push-Endpoint als Matrix-Pusher registriert")
+                onLog("Push endpoint registered as Matrix pusher")
             } catch (t: Throwable) {
                 _state.value = PushState.FAILED
-                onLog("Pusher-Registrierung fehlgeschlagen: ${t.message}")
+                onLog("Pusher registration failed: ${t.message}")
             }
         }
     }
 
     fun onRegistrationFailed(reason: String?) {
         _state.value = PushState.FAILED
-        onLog("Push-Registrierung fehlgeschlagen: ${reason ?: "unbekannt"}")
+        onLog("Push registration failed: ${reason ?: "unknown"}")
     }
 
     fun onUnregistered() {
         _state.value = PushState.NOT_AVAILABLE
-        onLog("Push-Registrierung vom Distributor aufgehoben")
+        onLog("Push registration revoked by the distributor")
     }
 
-    /** Push-Nachricht empfangen → Sync anstoßen (PoC: keine Benachrichtigung). */
+    /** Push message received → trigger sync (PoC: no notification). */
     fun onMessage() {
         scope.launch {
             try {
                 channelClient.syncOnce()
-                onLog("Push ausgelöst: Sync ausgeführt")
+                onLog("Push triggered: sync executed")
             } catch (t: Throwable) {
-                onLog("Push-Sync fehlgeschlagen: ${t.message}")
+                onLog("Push sync failed: ${t.message}")
             }
         }
     }

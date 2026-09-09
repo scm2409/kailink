@@ -1,49 +1,49 @@
-# Entscheidungen
+# Decisions
 
-- Das offizielle Matrix Rust SDK `sdk-android:26.09.08` übernimmt Protokoll,
-  Sync und E2EE.
-- UnifiedPush `3.3.5` nutzt die Topic-URL als Matrix-`pushkey`; das
-  konfigurierbare Standard-Gateway ist
+- The official Matrix Rust SDK `sdk-android:26.09.08` handles protocol,
+  sync, and E2EE.
+- UnifiedPush `3.3.5` uses the topic URL as the Matrix `pushkey`; the
+  configurable default gateway is
   `https://ntfy.sh/_matrix/push/v1/notify`.
-- Sitzungen werden produktiv mit AES-256-GCM und einem nicht exportierbaren
-  Android-Keystore-Schlüssel geschützt; JVM-Tests verwenden den Dateitestdouble.
-- Die Phase-1-Version lautet `0.2.1-phase1`.
+- Sessions are protected in production with AES-256-GCM and a non-exportable
+  Android Keystore key; JVM tests use the file test double.
+- The Phase-1 version is `0.2.1-phase1`.
 
-- Für Android-Instrumentierungstests werden AndroidX Test Runner `1.6.2`,
-  AndroidX Test JUnit `1.2.1` und Test Core `1.6.1` verwendet. Der erste
-  Emulatornachweis läuft per separater APK-Installation und
-  `am instrument`, weil die x86_64-Emulatorvariante nicht automatisch eine
-  eigene `connectedEmulatorDebugAndroidTest`-Gradle-Aufgabe erzeugt.
+- For Android instrumentation tests, AndroidX Test Runner `1.6.2`,
+  AndroidX Test JUnit `1.2.1`, and Test Core `1.6.1` are used. The first
+  emulator proof runs via a separate APK installation and
+  `am instrument`, because the x86_64 emulator variant does not automatically
+  create its own `connectedEmulatorDebugAndroidTest` Gradle task.
 
-- Das Emulator-Gate-Skript beendet den Lauf absichtlich mit Exit-Code 3, wenn
-  nach den grünen HTTP-, Build- und Instrumentierungs-Smokes die vollständige
-  Matrix-/E2EE-/UnifiedPush-Kette verlangt wird. Ohne echten Test-
-  Konfigurationskanal, kontrollierten E2EE-Schlüsselaustausch und
-  Distributor-Nachweis wäre ein grüner Exit-Code irreführend.
+- The emulator gate script deliberately terminates the run with exit code 3 when
+  the full Matrix/E2EE/UnifiedPush chain is demanded after the green HTTP,
+  build, and instrumentation smokes. Without a real test
+  configuration channel, controlled E2EE key exchange, and
+  distributor proof, a green exit code would be misleading.
 
-- Die gegen `sdk-android:26.09.08` verifizierten E2EE-Typen liegen im
-  Namespace `uniffi.matrix_sdk_crypto`; die optionale Testkonfiguration setzt
-  `CollectStrategy.ALL_DEVICES` und `DecryptionSettings(TrustRequirement.UNTRUSTED)`.
-  Cross-Signing und Key-Backup werden nicht getestet oder behauptet.
-  Commit: `8db4c4e` (Chunk B, verschlüsselte zweite Leg).
+- The E2EE types verified against `sdk-android:26.09.08` live in the
+  `uniffi.matrix_sdk_crypto` namespace; the optional test configuration sets
+  `CollectStrategy.ALL_DEVICES` and `DecryptionSettings(TrustRequirement.UNTRUSTED)`.
+  Cross-signing and key backup are not tested or claimed.
+  Commit: `8db4c4e` (Chunk B, encrypted second leg).
 
-- UniFFI-Builder sind immutable (Quelle:
-  `bindings/matrix-sdk-ffi/src/client_builder.rs` im matrix-rust-sdk —
-  jeder Setter nimmt `self: Arc<Self>` und gibt einen NEUEN Builder
-  zurueck). `MatrixSdkChannelClient.buildClient` ignorierte die
-  Rueckgaben — der Build lief ohne jede Config
-  (`ClientBuildError: ... must be called`). Fix: Rueckgaben verketten
-  (`builder = builder.homeserverUrl(...)` etc.). Der Login-Pfad
-  funktionierte zuvor nie, daher keine Nutzerverhaltensänderung.
+- UniFFI builders are immutable (source:
+  `bindings/matrix-sdk-ffi/src/client_builder.rs` in the matrix-rust-sdk —
+  every setter takes `self: Arc<Self>` and returns a NEW builder).
+  `MatrixSdkChannelClient.buildClient` ignored the
+  return values — the build ran without any config
+  (`ClientBuildError: ... must be called`). Fix: chain the return values
+  (`builder = builder.homeserverUrl(...)` etc.). The login path
+  never worked before, so there is no user-facing behavior change.
   Commit: `d9d4190`.
-- Cleartext nur in `emulatorDebug`: `network_security_config.xml`
-  (`cleartextTrafficPermitted=true` nur fuer `10.0.2.2`, `127.0.0.1`,
-  `localhost`, `192.168.42.20`) + Manifest-Overlay mit
-  `android:networkSecurityConfig`. Beweis: `aapt`-Dump des
-  `app-emulatorDebug.apk` zeigt `networkSecurityConfig`,
-  `app-debug.apk` enthaelt es nicht. `androidTest`-Manifest wirkt nicht
-  (Test-APK-Prozess folgt der App-Policy).
-- Conduit-Grenzen: kein Sliding Sync (`VersionIsMissing` bei
-  `syncService().finish()`) — E2E nutzt `syncOnce`; Emulator-Netz defekt
-  (`10.0.2.2` unerreichbar) — Lauf nutzt `adb reverse` nach `127.0.0.1`.
-  Commit: `919de4c` (C2b-Beweis: Conduit→ntfy-Zustellung).
+- Cleartext only in `emulatorDebug`: `network_security_config.xml`
+  (`cleartextTrafficPermitted=true` only for `10.0.2.2`, `127.0.0.1`,
+  `localhost`, `192.168.42.20`) + manifest overlay with
+  `android:networkSecurityConfig`. Proof: `aapt` dump of the
+  `app-emulatorDebug.apk` shows `networkSecurityConfig`;
+  `app-debug.apk` does not contain it. The `androidTest` manifest has no effect
+  (the test APK process follows the app policy).
+- Conduit limits: no sliding sync (`VersionIsMissing` at
+  `syncService().finish()`) — the E2E uses `syncOnce`; the emulator network is broken
+  (`10.0.2.2` unreachable) — the run uses `adb reverse` to `127.0.0.1`.
+  Commit: `919de4c` (C2b proof: Conduit→ntfy delivery).

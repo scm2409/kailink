@@ -22,59 +22,59 @@ fun pushNotificationPayloadChecks() {
             timestampMillis = timestamp,
         )
 
-    Checks.check("fromLatest wählt den Raum mit der jüngsten eingehenden Nachricht") {
+    Checks.check("fromLatest picks the room with the most recent incoming message") {
         val older = room(
-            "!raum-alt:example.org",
-            "Alter Raum",
-            message("m1", "!raum-alt:example.org", "@bob:example.org", "älter", MessageDirection.INCOMING, 100L),
+            "!room-old:example.org",
+            "Old room",
+            message("m1", "!room-old:example.org", "@bob:example.org", "older", MessageDirection.INCOMING, 100L),
         )
         val newer = room(
-            "!raum-neu:example.org",
-            "Neuer Raum",
-            message("m2", "!raum-neu:example.org", "@carol:example.org", "neuer", MessageDirection.INCOMING, 200L),
+            "!room-new:example.org",
+            "New room",
+            message("m2", "!room-new:example.org", "@carol:example.org", "newer", MessageDirection.INCOMING, 200L),
         )
 
         val payload = PushNotificationPayload.fromLatest(listOf(older, newer))
-            ?: throw CheckFailure("Payload vorhanden")
+            ?: throw CheckFailure("Payload present")
 
-        expectEquals("!raum-neu:example.org", payload.roomId, "Raum-ID")
-        expectEquals("Neuer Raum", payload.title, "Titel")
-        expectEquals("carol: neuer", payload.text, "Vorschau")
+        expectEquals("!room-new:example.org", payload.roomId, "Room ID")
+        expectEquals("New room", payload.title, "Title")
+        expectEquals("carol: newer", payload.text, "Preview")
     }
 
-    Checks.check("fromLatest ignoriert nur ausgehende Nachrichten und leere Listen") {
+    Checks.check("fromLatest ignores outgoing-only messages and empty lists") {
         val outgoingOnly = room(
-            "!raum:example.org",
-            "Raum",
-            message("m1", "!raum:example.org", "@alice:example.org", "von mir", MessageDirection.OUTGOING, 100L),
+            "!room:example.org",
+            "Room",
+            message("m1", "!room:example.org", "@alice:example.org", "from me", MessageDirection.OUTGOING, 100L),
         )
 
-        expectNull(PushNotificationPayload.fromLatest(emptyList()), "leere Raumliste")
-        expectNull(PushNotificationPayload.fromLatest(listOf(outgoingOnly)), "nur ausgehend")
-        expectNull(PushNotificationPayload.fromLatest(listOf(room("!r:example.org", "Leer", null))), "ohne Nachricht")
+        expectNull(PushNotificationPayload.fromLatest(emptyList()), "empty room list")
+        expectNull(PushNotificationPayload.fromLatest(listOf(outgoingOnly)), "outgoing only")
+        expectNull(PushNotificationPayload.fromLatest(listOf(room("!r:example.org", "Empty", null))), "without message")
     }
 
-    Checks.check("Nicht entschlüsselbare Nachricht erzeugt Platzhaltertext") {
+    Checks.check("Undecryptable message produces placeholder text") {
         val utd = room(
-            "!raum:example.org",
-            "Raum",
-            message("m1", "!raum:example.org", "@bob:example.org", "unlesbar", MessageDirection.INCOMING, 100L, DeliveryState.UNDECRYPTABLE),
+            "!room:example.org",
+            "Room",
+            message("m1", "!room:example.org", "@bob:example.org", "unreadable", MessageDirection.INCOMING, 100L, DeliveryState.UNDECRYPTABLE),
         )
 
         val payload = PushNotificationPayload.fromLatest(listOf(utd))
-            ?: throw CheckFailure("Payload vorhanden")
+            ?: throw CheckFailure("Payload present")
 
-        expectEquals(PushNotificationPayload.UNDECRYPTABLE_TEXT, payload.text, "Platzhalter")
+        expectEquals(PushNotificationPayload.UNDECRYPTABLE_TEXT, payload.text, "Placeholder")
     }
 
-    Checks.check("Fehlender Raumname fällt auf Fallback-Titel zurück") {
+    Checks.check("Missing room name falls back to the fallback title") {
         val payload = PushNotificationPayload.from(
             null,
             message("m1", "", "@bob:example.org", "", MessageDirection.INCOMING, 100L),
         )
 
-        expectEquals(PushNotificationPayload.FALLBACK_TITLE, payload.title, "Fallback-Titel")
-        expectEquals(PushNotificationPayload.EMPTY_BODY_TEXT, payload.text, "leerer Text")
-        expectNull(payload.roomId, "keine Raum-ID")
+        expectEquals(PushNotificationPayload.FALLBACK_TITLE, payload.title, "Fallback title")
+        expectEquals(PushNotificationPayload.EMPTY_BODY_TEXT, payload.text, "empty text")
+        expectNull(payload.roomId, "no room ID")
     }
 }

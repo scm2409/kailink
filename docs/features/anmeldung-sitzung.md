@@ -1,46 +1,46 @@
-# Feature: Anmeldung & Sitzungswiederherstellung
+# Feature: Login & Session Restoration
 
-## Interaktionsmodell
+## Interaction Model
 
-- Nutzer:in trägt Homeserver-URL, Konto und Passwort ein und wählt
-  "Anmelden".
-- Bei vorhandenem gespeichertem Sitzungsdatensatz versucht die App beim Start
-  **automatisch** die Wiederherstellung; die Anmeldeoberfläche zeigt dann
-  "Sitzung wird wiederhergestellt …" und springt direkt in die Raumliste.
-- Fehler (leere Felder, fehlgeschlagene Wiederherstellung) werden als
-  deutsche Fehlermeldung im Formular angezeigt; eine nicht mehr
-  wiederherstellbare Sitzung wird gelöscht.
+- The user enters homeserver URL, account, and password and selects
+  "Sign in".
+- If a stored session record exists, the app attempts restoration
+  **automatically** at startup; the login screen then shows
+  "Restoring session …" and jumps straight into the room list.
+- Errors (empty fields, failed restoration) are shown as an
+  error message in the form; a session that can no longer be
+  restored is deleted.
 
-## Implementierung (Phase 1)
+## Implementation (Phase 1)
 
-- Domäne: `ChannelClient.login(url, user, password)` /
-  `ChannelClient.restore(session)`; `SessionStore` als Persistenzvertrag.
-- Adapter: `InMemoryChannelClient` (Phase-1-Simulation) erzeugt aus
-  nicht-leeren Anmeldedaten eine Session
-  (`@<benutzer>:phase1.local`, Zufalls-Token) und sichert sie via
-  `FileSessionStore`. Es werden **keine** Netzwerkverbindungen aufgebaut.
-- Persistenz: `FileSessionStore` (`session.properties`, `java.util.Properties`)
-  im App-Files-Verzeichnis.
+- Domain: `ChannelClient.login(url, user, password)` /
+  `ChannelClient.restore(session)`; `SessionStore` as the persistence contract.
+- Adapter: `InMemoryChannelClient` (Phase-1 simulation) creates a session from
+  non-empty credentials
+  (`@<user>:phase1.local`, random token) and stores it via
+  `FileSessionStore`. **No** network connections are established.
+- Persistence: `FileSessionStore` (`session.properties`, `java.util.Properties`)
+  in the app files directory.
 
-## Phase-2-Ausblick
+## Phase-2 Outlook
 
-- `MatrixSdkChannelClient` (Referenz unter `app/src/phase2/`) ersetzt die
-  Simulation: `ClientBuilder.homeserverUrl(...).sqliteStore(...).build()`,
-  `Client.login(...)` bzw. `Client.restoreSession(...)`.
-- Krypto-Store (SQLite) überlebt Neustarts → Wiederherstellung auch für
-  E2EE belastbar.
+- `MatrixSdkChannelClient` (reference under `app/src/phase2/`) replaces the
+  simulation: `ClientBuilder.homeserverUrl(...).sqliteStore(...).build()`,
+  `Client.login(...)` or `Client.restoreSession(...)`.
+- The crypto store (SQLite) survives restarts → restoration is also
+  robust for E2EE.
 
-## PoC-Grenzen
+## PoC Limits
 
-- Kein Passwort-Speichern, kein SSO/OAuth, kein QR-Login.
-- `FileSessionStore` speichert das Token unverschlüsselt im
-  App-privaten Verzeichnis (kein Keystore) — bewusst, in verification.md
-  als Risiko notiert.
-- Phase 1: Anmeldung prüft nur die Felder (Simulation), keine echten Konten.
+- No password storage, no SSO/OAuth, no QR login.
+- `FileSessionStore` stores the token unencrypted in the
+  app-private directory (no Keystore) — intentional, noted as a risk in
+  verification.md.
+- Phase 1: login only validates the fields (simulation), no real accounts.
 
-## Verifikation
+## Verification
 
-V1: `LoginViewModelChecks` (5 Prüfungen) und
-`InMemoryChannelClientChecks` (6 Prüfungen) — bestanden 2026-09-08, siehe
-[`verification.md`](verification.md). V2/V3: Offline-Build + Badging. V4:
-manuelles Protokoll, Testfälle MT-1/MT-2 (**nicht beobachtet**, kein Gerät).
+V1: `LoginViewModelChecks` (5 checks) and
+`InMemoryChannelClientChecks` (6 checks) — passed 2026-09-08, see
+[`verification.md`](verification.md). V2/V3: offline build + badging. V4:
+manual protocol, test cases MT-1/MT-2 (**not observed**, no device).

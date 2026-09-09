@@ -15,35 +15,35 @@ fun pushChainChecks() {
         return Triple(controller, SimulatedPushTrigger(controller), client)
     }
 
-    Checks.check("Registrierung durchläuft READY bis REGISTERED und meldet Endpoint an") {
+    Checks.check("Registration goes through READY to REGISTERED and reports the endpoint") {
         val (controller, trigger, client) = wired()
 
         trigger.tryRegister()
 
-        expectEquals(PushState.REGISTERED, controller.state.value, "Endzustand")
+        expectEquals(PushState.REGISTERED, controller.state.value, "Final state")
         expectEquals(
             listOf("https://push.phase1.local/org-box44-kailink/endpoint"),
             client.registerEndpointCalls,
-            "Endpoint an Kanalschicht",
+            "Endpoint at the channel layer",
         )
     }
 
-    Checks.check("Eingehender Push stößt syncOnce an") {
+    Checks.check("Incoming push triggers syncOnce") {
         val (controller, trigger, client) = wired()
         trigger.tryRegister()
 
         trigger.simulateIncomingPush()
 
-        expectEquals(1, client.syncOnceCalls, "syncOnce-Aufrufe")
-        expectEquals(PushState.REGISTERED, controller.state.value, "Zustand unverändert")
+        expectEquals(1, client.syncOnceCalls, "syncOnce calls")
+        expectEquals(PushState.REGISTERED, controller.state.value, "State unchanged")
     }
 
-    Checks.check("Abmeldung setzt Zustand auf NOT_AVAILABLE") {
+    Checks.check("Unregistration sets the state to NOT_AVAILABLE") {
         val (controller, trigger, _) = wired()
         trigger.tryRegister()
 
         trigger.unregister()
 
-        expectEquals(PushState.NOT_AVAILABLE, controller.state.value, "Zustand nach Abmeldung")
+        expectEquals(PushState.NOT_AVAILABLE, controller.state.value, "State after unregistration")
     }
 }

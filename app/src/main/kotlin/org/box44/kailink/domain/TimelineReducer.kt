@@ -3,8 +3,8 @@ package org.box44.kailink.domain
 import org.box44.kailink.domain.model.Message
 
 /**
- * Zwischenstände der Chronik. Der Matrix-Adapter übersetzt SDK-`TimelineDiff`
- * in diese domäneneigenen Patches; [TimelineReducer] wendet sie an.
+ * Intermediate states of the timeline. The Matrix adapter translates SDK
+ * `TimelineDiff`s into these domain patches; [TimelineReducer] applies them.
  */
 sealed interface TimelinePatch {
     data class Reset(val messages: List<Message>) : TimelinePatch
@@ -14,7 +14,7 @@ sealed interface TimelinePatch {
     data class Set(val index: Int, val message: Message) : TimelinePatch
     data class Remove(val index: Int) : TimelinePatch
 
-    /** Behält die letzten [length] Elemente (Sliding-Window des SDK). */
+    /** Keeps the last [length] elements (SDK sliding window). */
     data class Truncate(val length: Int) : TimelinePatch
     data object PopBack : TimelinePatch
     data object PopFront : TimelinePatch
@@ -22,9 +22,9 @@ sealed interface TimelinePatch {
 }
 
 /**
- * Reine Funktion: wendet [TimelinePatch]-Sequenzen auf die Chronik an.
- * JVM-getestet (TimelineReducerTest); alle Indizes werden in gültige
- * Bereiche gezwungen, damit SDK-Grenzfälle nicht die UI lahmlegen.
+ * Pure function: applies [TimelinePatch] sequences to the timeline.
+ * JVM-tested (TimelineReducerTest); all indices are coerced into valid
+ * ranges so that SDK edge cases cannot break the UI.
  */
 object TimelineReducer {
 

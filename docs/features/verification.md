@@ -1,86 +1,90 @@
-# Verifikation (Ist-Stand)
+# Verification (Current State)
 
-> **Wichtig (Grundsatz G8):** Hier stehen nur tatsächlich beobachtete
-> Ergebnisse mit Datum. Wenn ein Prüfmittel fehlte (z. B. kein Gerät), steht
-> das ausdrücklich dabei. Nachgetragene Ergebnisse sind mit Datum markiert.
+> **Important (principle G8):** Only actually observed
+> results with dates appear here. If a verification means was missing (e.g. no device), that
+> is stated explicitly. Retrospectively added results are marked with a date.
 
-**Umgebung der Beobachtung (2026-09-08):** Linux-Container, JDK 21 (mise),
-Android SDK unter `/home/dev/android-sdk` (platform android-36, build-tools
-35.0.0, platform-tools vorhanden), Gradle Wrapper 9.1.0 — **alle Builds und
-Prüfungen mit `--offline`**, also ohne Netzwerkzugriff. Kein Gerät/Emulator
-verfügbar. Keine Zugangsdaten im Repo.
+**Observation environment (2026-09-08):** Linux container, JDK 21 (mise),
+Android SDK under `/home/dev/android-sdk` (platform android-36, build-tools
+35.0.0, platform-tools present), Gradle wrapper 9.1.0 — **all builds and
+checks with `--offline`**, i.e. without network access. No device/emulator
+available. No credentials in the repo.
 
-**Umgebung der Phase-2-Beobachtung (2026-09-08, nachfolgender Abschnitt):**
-dieselbe Maschine, diesmal **mit Netzwerkzugriff** (Gradle durfte Artefakte
-nachladen). Weiterhin kein Gerät/Emulator, keine Zugangsdaten im Repo.
+**Environment of the Phase-2 observation (2026-09-08, section below):**
+same machine, this time **with network access** (Gradle was allowed to
+download artifacts). Still no device/emulator, no credentials in the repo.
 
-## Phase 2 — Beobachtungen (2026-09-08, online)
+## Phase 2 — Observations (2026-09-08, online)
 
-### Ausgangslage: Buildfehler durch Paket-/Namespace-Spalte
+### Starting point: build failure due to the package/namespace split
 
-**Beobachtet am 2026-09-08:** `./gradlew testDebugUnitTest assembleDebug`
-brach ab (`:app:compileDebugKotlin FAILED`) mit 40 ×
-`Unresolved reference 'R'` (u. a. `MainActivity.kt`, `RoomListAdapter.kt`,
-`MessageListAdapter.kt`): Quellpakete lagen auf `at.d71.kailink`, während
-`namespace`/`applicationId` bereits `org.box44.kailink` waren — das generierte
-R lag damit außerhalb der Quellpakete.
+**Observed on 2026-09-08:** `./gradlew testDebugUnitTest assembleDebug`
+failed (`:app:compileDebugKotlin FAILED`) with 40 ×
+`Unresolved reference 'R'` (among others `MainActivity.kt`, `RoomListAdapter.kt`,
+`MessageListAdapter.kt`): the source packages were on `at.d71.kailink`, while
+`namespace`/`applicationId` were already `org.box44.kailink` — the generated
+R was therefore outside the source packages.
 
-**Behebung (beobachtet):** sämtliche Kotlin-Pakete/-Imports (main, phase2,
-test), die simulierte Endpoint-URL und die SDK-`appId` konsequent auf
-`org.box44.kailink` bzw. `org-box44-kailink` umgestellt (git mv, Historie
-erhalten); R-Importe in den Adaptern lauten jetzt `org.box44.kailink.R`.
+**Fix (observed):** all Kotlin packages/imports (main, phase2,
+test), the simulated endpoint URL, and the SDK `appId` were consistently switched to
+`org.box44.kailink` or `org-box44-kailink` (git mv, history
+preserved); the R imports in the adapters now read `org.box44.kailink.R`.
 
-### Abhängigkeitsverifikation (G3, Phase 2)
+### Dependency verification (G3, Phase 2)
 
-**Beobachtet am 2026-09-08:** Die zuvor nicht vorhandenen Artefakte sind
-eingebunden und im Build belegt:
+**Observed on 2026-09-08:** The previously absent artifacts are
+integrated and evidenced in the build:
 
-| Artefakt | Version | Nachweis |
+| Artifact | Version | Evidence |
 | --- | --- | --- |
-| org.matrix.rustcomponents:sdk-android | 26.09.08 | Kompilierung + `libmatrix_sdk_ffi.so` im APK |
-| org.unifiedpush.android:connector | 3.3.5 | Kompilierung + Manifest-Receiver |
-| junit:junit | 4.13.2 | `testDebugUnitTest` ausgeführt (1 Test) |
-| kotlinx-coroutines-test | 1.7.3 | Test-Compile-Klassepfad |
+| org.matrix.rustcomponents:sdk-android | 26.09.08 | compilation + `libmatrix_sdk_ffi.so` in the APK |
+| org.unifiedpush.android:connector | 3.3.5 | compilation + manifest receiver |
+| junit:junit | 4.13.2 | `testDebugUnitTest` executed (1 test) |
+| kotlinx-coroutines-test | 1.7.3 | test compile classpath |
 
-Die SDK-AAR-APIs wurden vor der Adapter-Implementierung per
-`javap` gegen die lokalen AARs geprüft (u. a. `Client.login/restoreSession/
+The SDK AAR APIs were checked before the adapter implementation via
+`javap` against the local AARs (among others `Client.login/restoreSession/
 syncOnceV2/syncService()/setPusher`, `SyncServiceBuilder.finish()` (suspend),
-`Timeline.addListener` (suspend) → `TaskHandle`, `TimelineDiff`-Varianten mit
-`UInt`-Indizes, `MsgLikeKind.Message(MessageContent)`, `PusherKind.Http`,
+`Timeline.addListener` (suspend) → `TaskHandle`, `TimelineDiff` variants with
+`UInt` indices, `MsgLikeKind.Message(MessageContent)`, `PusherKind.Http`,
 `UnifiedPush.register/unregister/resolveDefaultDistributor`,
-`MessagingReceiver`-Abstract-Methoden). Zwei vom Referenzstand abweichende
-Signaturen wurden korrigiert (`getRoom`-Nullbarkeit,
+`MessagingReceiver` abstract methods). Two signatures deviating from the
+reference were corrected (`getRoom` nullability,
 `RoomMessageEventContentWithoutRelation?`).
 
-### V1 — JVM-Prüfungen (ab Phase 2: gewöhnliche JUnit-Aufgabe)
+### V1 — JVM checks (from Phase 2 on: ordinary JUnit task)
 
-**Beobachtet am 2026-09-08:** Die Phase-1-Abweichung (eigene
-`phase1Checks`-Aufgabe, Test-Tasks deaktiviert) ist aufgehoben: `junit:junit`
-ist Testabhängigkeit, die Prüfgruppen laufen über
-`AllChecksTest.runAllJvmChecks` als JUnit-Test. Die Phase-1-Prüfgruppen und
-Ergebnisse sind unverändert gültig (siehe Abschnitt V1 unten;
-`PushChainChecks` erwartet jetzt `org-box44-kailink` in der Endpoint-URL).
+**Observed on 2026-09-08:** The Phase-1 deviation (own
+`phase1Checks` task, test tasks disabled) is lifted: `junit:junit`
+is a test dependency, the check groups run via
+`AllChecksTest.runAllJvmChecks` as a JUnit test. The Phase-1 check groups and
+results remain valid unchanged (see section V1 below;
+`PushChainChecks` now expects `org-box44-kailink` in the endpoint URL).
 
 - `./gradlew testDebugUnitTest` → `BUILD SUCCESSFUL`;
-  JUnit-Bericht: `tests="1" failures="0" skipped="0"`;
-  Prüfbericht: `Prüfungen: 39, bestanden: 39, fehlgeschlagen: 0`.
+  JUnit report: `tests="1" failures="0" skipped="0"`;
+  check report: `Prüfungen: 39, bestanden: 39, fehlgeschlagen: 0`.
+  *(Note, 2026-09-09, language migration to English (G9): the quoted check
+  report is the verbatim observed output of 2026-09-08, when the check
+  runner still printed German. The runner's strings are now English, so
+  current runs print the equivalent `Checks: 39, passed: 39, failed: 0`.)*
 
-### V2 — Kompilierung & APK (Phase 2)
+### V2 — Compilation & APK (Phase 2)
 
-**Beobachtet am 2026-09-08:**
+**Observed on 2026-09-08:**
 
 - `./gradlew testDebugUnitTest assembleDebug` →
-  `BUILD SUCCESSFUL in 3s` (43 actionable tasks, inkrementell).
-- Kontrolle mit vollständigem Neulauf:
+  `BUILD SUCCESSFUL in 3s` (43 actionable tasks, incremental).
+- Cross-check with a full rerun:
   `./gradlew testDebugUnitTest assembleDebug --rerun-tasks` →
   `BUILD SUCCESSFUL in 6s`.
-- Artefakt: `app/build/outputs/apk/debug/app-debug.apk`, debug-signiert.
-- Das APK enthält die echten Rust-Bibliotheken des matrix-rust-sdk
-  (`lib/arm64-v8a/libmatrix_sdk_ffi.so` u. a., ≈ 63 MB für arm64-v8a).
+- Artifact: `app/build/outputs/apk/debug/app-debug.apk`, debug-signed.
+- The APK contains the real Rust libraries of the matrix-rust-sdk
+  (`lib/arm64-v8a/libmatrix_sdk_ffi.so` among others, ≈ 63 MB for arm64-v8a).
 
-### V3 — Strukturprüfung (Phase 2)
+### V3 — Structure check (Phase 2)
 
-**Beobachtet am 2026-09-08** (`aapt2 dump badging`, build-tools 35.0.0):
+**Observed on 2026-09-08** (`aapt2 dump badging`, build-tools 35.0.0):
 
 ```
 package: name='org.box44.kailink' versionCode='1' versionName='0.2.0-phase1'
@@ -88,101 +92,111 @@ package: name='org.box44.kailink' versionCode='1' versionName='0.2.0-phase1'
 launchable-activity: name='org.box44.kailink.MainActivity'
 ```
 
-- Manifest: `INTERNET`-Berechtigung; UnifiedPush-Receiver
-  `.data.push.KaiLinkPushReceiver` (`exported=false`) mit den
-  Connector-Aktionen `MESSAGE`, `NEW_ENDPOINT`, `REGISTRATION_FAILED`,
+- Manifest: `INTERNET` permission; UnifiedPush receiver
+  `.data.push.KaiLinkPushReceiver` (`exported=false`) with the
+  connector actions `MESSAGE`, `NEW_ENDPOINT`, `REGISTRATION_FAILED`,
   `UNREGISTERED`.
-- Verdrahtung (Kompilierungsebene, belegt durch erfolgreichen Build):
-  `AppGraph` erzeugt `MatrixSdkChannelClient` (matrix-rust-sdk,
-  SQLite-Store unter `files/matrix/store`) und `UnifiedPushRegistrar`
-  als `PushRegistrationTrigger`.
+- Wiring (compile level, evidenced by the successful build):
+  `AppGraph` creates `MatrixSdkChannelClient` (matrix-rust-sdk,
+  SQLite store under `files/matrix/store`) and `UnifiedPushRegistrar`
+  as the `PushRegistrationTrigger`.
 
-**Nicht beobachtet:** Funktionsnachweis gegen einen echten Homeserver bzw.
-Distributor (V4, kein Gerät/keine Zugangsdaten in dieser Umgebung). Die
-Phase-2-Verdrahtung ist kompiliert und im Debug-APK enthalten; ein Laufzeit-
-nachweis steht aus. `InMemoryChannelClient` und `SimulatedPushTrigger`
-bleiben als JVM-geprüfte Referenz im Baum (Tests nutzen sie weiterhin).
+**Not observed:** functional proof against a real homeserver or
+distributor (V4, no device/no credentials in this environment). The
+Phase-2 wiring is compiled and contained in the debug APK; a runtime
+proof is still pending. `InMemoryChannelClient` and `SimulatedPushTrigger`
+remain in the tree as the JVM-checked reference (tests still use them).
 
-## Emulator-E2E (Chunk A+B)
+## Emulator E2E (Chunk A+B)
 
-**Beobachtet am 2026-09-09:** Der Emulator-E2E-Stand mit Chunk A (zwei
-Konten, unverschlüsselt) und Chunk B (verschlüsselte zweite Leg) ist
-grün. `scripts/emulator-e2e.sh` reproduziert den Lauf in einem Befehl.
+**Observed on 2026-09-09:** The emulator E2E state with Chunk A (two
+accounts, unencrypted) and Chunk B (encrypted second leg) is
+green. `scripts/emulator-e2e.sh` reproduces the run in one command.
 
-## Matrix der Verifikationsstufen (aus project-constitution.md)
+## Matrix of Verification Levels (from project-constitution.md)
 
-| Stufe | Mittel | Diese Umgebung |
+| Level | Means | This environment |
 | --- | --- | --- |
-| V1 JVM-Prüfungen | `./gradlew --offline :app:phase1Checks` | **bestanden (39/39)** |
-| V2 Kompilieren/APK | `./gradlew --offline :app:assembleDebug` | **bestanden** |
-| V3 Strukturprüfung | Badging/Manifest-Prüfung | **bestanden** |
-| V4 Gerät | Emulator/Gerät | **nicht verfügbar** → manuelles Protokoll |
+| V1 JVM checks | `./gradlew --offline :app:phase1Checks` | **passed (39/39)** |
+| V2 Compile/APK | `./gradlew --offline :app:assembleDebug` | **passed** |
+| V3 Structure check | badging/manifest check | **passed** |
+| V4 Device | emulator/device | **not available** → manual protocol |
 
-**Abweichung vom Standardmittel:** JUnit ist im lokalen Offline-Cache nicht
-vorhanden; die V1-Prüfungen laufen daher als eigene Gradle-Aufgabe
-`phase1Checks` (JavaExec über die kompilierten Test-Klassen, eigener
-Prüf-Runner, Bericht unter `app/build/reports/phase1-checks.txt`). Die
-Gradle-Test-Aufgaben (`testDebugUnitTest`) sind in Phase 1 bewusst
-deaktiviert. Migration auf JUnit steht im Phase-2-Plan (architecture.md).
-*(Abgelöst am 2026-09-08, siehe Phase-2-Abschnitt oben: JUnit 4 ist
-Testabhängigkeit, `testDebugUnitTest` läuft und führt die Prüfungen aus;
-die `phase1Checks`-Aufgabe wurde entfernt.)*
+**Deviation from the standard means:** JUnit is not present in the local
+offline cache; the V1 checks therefore run as a dedicated Gradle task
+`phase1Checks` (JavaExec over the compiled test classes, own
+check runner, report at `app/build/reports/phase1-checks.txt`). The
+Gradle test tasks (`testDebugUnitTest`) are deliberately
+disabled in Phase 1. Migration to JUnit is in the Phase-2 plan (architecture.md).
+*(Superseded on 2026-09-08, see the Phase-2 section above: JUnit 4 is
+a test dependency, `testDebugUnitTest` runs and executes the checks;
+the `phase1Checks` task was removed.)*
 
-## 1. Abhängigkeitsverifikation (G3)
+**Update (2026-09-09, language migration to English):** re-observed with
+`./gradlew testDebugUnitTest assembleDebug --offline --rerun-tasks` →
+`BUILD SUCCESSFUL`; the check report now reads
+`Checks: 46, passed: 46, failed: 0` (English runner strings, G9; the count
+grew from 39 to 46 because the migration added check cases). The dated
+39/39 results below remain the verbatim observations of 2026-09-08.
 
-**Beobachtet am 2026-09-08 (Offline-Cache-Audit, `ls`
+## 1. Dependency Verification (G3)
+
+**Observed on 2026-09-08 (offline cache audit, `ls`
 `~/.gradle/caches/modules-2/files-2.1/…`):**
 
-- Vorhanden und im Build benutzt: Gradle 9.1.0, AGP 8.13.2, Kotlin 2.2.21,
+- Present and used in the build: Gradle 9.1.0, AGP 8.13.2, Kotlin 2.2.21,
   kotlinx-coroutines-android 1.7.3, Android platform 36, build-tools 35.0.0.
-- **Nicht vorhanden im Cache** (daher bewusst nicht eingebunden):
-  Jetpack Compose (alle `androidx.compose.*`), `org.matrix.rustcomponents`,
+- **Not present in the cache** (therefore deliberately not integrated):
+  Jetpack Compose (all `androidx.compose.*`), `org.matrix.rustcomponents`,
   `org.unifiedpush.android.connector`, JUnit 4/5, `kotlinx-coroutines-test`,
-  AndroidX-Bibliotheken jenseits des Frameworks.
-- **Ergebnis:** Phase 1 benötigt ausschließlich lokal vorhandene Artefakte;
-  keine Stubs im kompilierten Code (G5: stattdessen dokumentierte
-  Simulations-Implementierungen `InMemoryChannelClient` und
+  AndroidX libraries beyond the framework.
+- **Result:** Phase 1 needs only locally present artifacts;
+  no stubs in the compiled code (G5: instead, documented
+  simulation implementations `InMemoryChannelClient` and
   `SimulatedPushTrigger`).
 
-## 2. V1 — JVM-Prüfungen (`phase1Checks`)
+## 2. V1 — JVM Checks (`phase1Checks`)
 
-**Beobachtet am 2026-09-08:**
+**Observed on 2026-09-08:**
 `./gradlew --offline :app:phase1Checks` → `BUILD SUCCESSFUL`;
-Bericht: `Prüfungen: 39, bestanden: 39, fehlgeschlagen: 0`.
+report: `Prüfungen: 39, bestanden: 39, fehlgeschlagen: 0`.
+*(Note, 2026-09-09: verbatim observed output of 2026-09-08 in German; the
+check runner's strings are now English (G9) — current equivalent:
+`Checks: 39, passed: 39, failed: 0`.)*
 
-| Prüfgruppe | Fokus | Ergebnis |
+| Check group | Focus | Result |
 | --- | --- | --- |
-| `TimelineReducerChecks` (9) | Chronik-Patches → Nachrichtenliste (Reset/PushBack/PushFront/Insert/Set/Remove/Pop*/Truncate/Sequenz) | bestanden |
-| `FileSessionStoreChecks` (4) | Sitzungspersistenz Round-Trip, fehlende Datei, Clear, ohne Refresh-Token | bestanden |
-| `PushControllerChecks` (4) | Endpoint → Pusher-Registrierung → REGISTERED, Push → Sync, Fehlschläge | bestanden |
-| `LoginViewModelChecks` (5) | Login-Erfolg/Fehlerpfade, leere Felder, Wiederherstellung inkl. Löschen | bestanden |
-| `RoomListViewModelChecks` (3) | refresh/Sync, RoomsUpdated-Ereignis, Logout | bestanden |
-| `TimelineViewModelChecks` (5) | Chronik-Filter nach Raum-ID, Abo+Sync, Senden/Leertext/Sendefehler | bestanden |
-| `InMemoryChannelClientChecks` (6) | Kanal-Simulation: Login-Pflichtfelder, Sitzungsspeicherung, Senden → Ereignis, negative Fälle, Logout | bestanden |
-| `PushChainChecks` (3) | SimulatedPushTrigger → REGISTERED → syncOnce → Abmeldung | bestanden |
+| `TimelineReducerChecks` (9) | timeline patches → message list (Reset/PushBack/PushFront/Insert/Set/Remove/Pop*/Truncate/Sequence) | passed |
+| `FileSessionStoreChecks` (4) | session persistence round-trip, missing file, clear, without refresh token | passed |
+| `PushControllerChecks` (4) | endpoint → pusher registration → REGISTERED, push → sync, failures | passed |
+| `LoginViewModelChecks` (5) | login success/failure paths, empty fields, restoration incl. deletion | passed |
+| `RoomListViewModelChecks` (3) | refresh/sync, RoomsUpdated event, logout | passed |
+| `TimelineViewModelChecks` (5) | timeline filter by room ID, subscribe+sync, send/empty text/send failure | passed |
+| `InMemoryChannelClientChecks` (6) | channel simulation: login required fields, session storage, send → event, negative cases, logout | passed |
+| `PushChainChecks` (3) | SimulatedPushTrigger → REGISTERED → syncOnce → unregister | passed |
 
-Vollständige Ist-Ausgabe: `app/build/reports/phase1-checks.txt`.
+Full as-is output: `app/build/reports/phase1-checks.txt`.
 
-## 3. V2 — Kompilierung & APK
+## 3. V2 — Compilation & APK
 
-**Beobachtet am 2026-09-08:**
+**Observed on 2026-09-08:**
 
 - `./gradlew --offline :app:phase1Checks :app:assembleDebug` →
   `BUILD SUCCESSFUL in 13s` (39 actionable tasks).
 - `./gradlew --offline check` → `BUILD SUCCESSFUL in 16s`
-  (58 actionable tasks; enthält Lint mit `abortOnError=false` und die
-  Prüf-Aufgabe).
-- Wiederholung nach `clean` (vollständiger Neuaufbau):
+  (58 actionable tasks; includes Lint with `abortOnError=false` and the
+  check task).
+- Repeat after `clean` (full rebuild):
   `./gradlew --offline clean :app:phase1Checks :app:assembleDebug` →
-  `BUILD SUCCESSFUL in 6s` (40 actionable tasks, alle ausgeführt),
-  Prüfbericht erneut 39/39.
-- Artefakt: `app/build/outputs/apk/debug/app-debug.apk` (≈ 3,9 MB),
-  debug-signiert mit dem lokalen Debug-Keystore. Ein Release-Build wurde
-  **nicht** ausgeführt (kein Anlass, kein Release-Zweck in Phase 1).
+  `BUILD SUCCESSFUL in 6s` (40 actionable tasks, all executed),
+  check report again 39/39.
+- Artifact: `app/build/outputs/apk/debug/app-debug.apk` (≈ 3.9 MB),
+  debug-signed with the local debug keystore. A release build was
+  **not** executed (no reason, no release purpose in Phase 1).
 
-## 4. V3 — Strukturprüfung
+## 4. V3 — Structure Check
 
-**Beobachtet am 2026-09-08** (`aapt2 dump badging`, build-tools 35.0.0):
+**Observed on 2026-09-08** (`aapt2 dump badging`, build-tools 35.0.0):
 
 ```
 package: name='at.d71.kailink' versionCode='1' versionName='0.1.0-phase1'
@@ -193,49 +207,49 @@ application-label:'KaiLink'
 launchable-activity: name='at.d71.kailink.MainActivity'
 ```
 
-- `applicationId` = `at.d71.kailink` ✓, `minSdkVersion` 28 ✓ (Vorgabe),
+- `applicationId` = `at.d71.kailink` ✓, `minSdkVersion` 28 ✓ (spec),
   `targetSdkVersion` 36 ✓.
-- Manifest: nur `INTERNET`-Berechtigung deklariert (Phase 1 baut keine
-  Verbindungen auf; Berechtigung ist für Phase 2 reserviert); kein
-  FCM-/Google-Code, kein Push-Receiver (Phase 2).
+- Manifest: only the `INTERNET` permission declared (Phase 1 establishes no
+  connections; the permission is reserved for Phase 2); no
+  FCM/Google code, no push receiver (Phase 2).
 
-## 5. V4 — Geräteverifikation
+## 5. V4 — Device Verification
 
-**Nicht möglich in dieser Umgebung (kein Emulator, kein Gerät).** Die
-verschriftlichten Versuchsanordnungen stehen in
-[`../manualtest-protokoll.md`](../manualtest-protokoll.md) (MT-1 bis MT-8,
-inkl. Flugmodus-Nachweis, dass Phase 1 ohne Netz funktioniert); alle
-dortigen Testfälle sind hier als **nicht beobachtet** zu führen, bis sie
-auf einem Gerät gelaufen sind.
+**Not possible in this environment (no emulator, no device).** The
+written-out test setups are in
+[`../manualtest-protokoll.md`](../manualtest-protokoll.md) (MT-1 through MT-8,
+incl. the airplane-mode proof that Phase 1 works without network); all
+test cases there are to be recorded here as **not observed** until they
+have run on a device.
 
-## 6. Bekannte Abweichungen (Phase 1) und offene Risiken
+## 6. Known Deviations (Phase 1) and Open Risks
 
-1. **Kanal ist eine Simulation** (`InMemoryChannelClient`): Anmeldedaten
-   werden nicht gegen einen Homeserver geprüft; Nachrichten liegen nur im
-   Speicher. E2EE ist in Phase 1 nicht vorhanden — Vorbereitung und
-   Referenzadapter siehe [`nachrichten-e2ee.md`](nachrichten-e2ee.md) und
+1. **Channel is a simulation** (`InMemoryChannelClient`): login credentials
+   are not checked against a homeserver; messages live only in
+   memory. E2EE is absent in Phase 1 — preparation and
+   reference adapter see [`nachrichten-e2ee.md`](nachrichten-e2ee.md) and
    `app/src/phase2/`.
-   *(Abgelöst am 2026-09-08, Phase 2: `AppGraph` verdrahtet
-   `MatrixSdkChannelClient` auf das echte matrix-rust-sdk; die Simulation
-   bleibt als JVM-Referenz in Tests. Laufzeitnachweis gegen einen echten
-   Homeserver: nicht beobachtet.)*
-2. **Framework-Views statt Jetpack Compose:** Compose-Artefakte fehlen im
-   Offline-Cache; ViewModels sind davon unberührt (StateFlow-Verträge).
-   *(unverändert in Phase 2)*
-3. **JUnit ersetzt durch `phase1Checks`** (siehe oben); Test-Task-Aktivierung
-   folgt in Phase 2. *(Abgelöst am 2026-09-08: JUnit-Aufgabe aktiv, 39/39.)*
-4. **Push ohne echten Distributor:** `SimulatedPushTrigger` treibt die
-   echte `PushController`-Kette; Benachrichtigungen werden nicht gerendert.
-   *(Teilweise abgelöst am 2026-09-08, Phase 2: `UnifiedPushRegistrar` +
-   `KaiLinkPushReceiver` + Manifest-Receiver sind verdrahtet;
-   Benachrichtigungs-Rendering bleibt Grenze. Laufzeitnachweis: nicht
-   beobachtet.)*
-5. **Token-Persistenz unverschlüsselt** im App-Files-Verzeichnis
-   (App-privat, aber ohne Keystore-Verschlüsselung). *(unverändert)*
-6. **Konkurrierende Agents:** während der Erstellung liefen zwei weitere
-   opencode-Agenten im selben Repo und überschrieben Dateien; sie wurden
-   angehalten, danach wurde der Ist-Stand komplett neu verifiziert (dieser
-   Bericht). Ein Commit wurde bewusst nicht durchgeführt.
-   *(Hinweis Phase 2, 2026-09-08: während des Folge-Passes erschien extern
-   der Commit `c8125fd` (u. a. Paketmigration, Adapterverdrahtung); er wurde
-   nicht verändert oder zurückgeschrieben.)*
+   *(Superseded on 2026-09-08, Phase 2: `AppGraph` wires
+   `MatrixSdkChannelClient` to the real matrix-rust-sdk; the simulation
+   remains in tests as the JVM reference. Runtime proof against a real
+   homeserver: not observed.)*
+2. **Framework Views instead of Jetpack Compose:** the Compose artifacts are missing from the
+   offline cache; the ViewModels are unaffected by this (StateFlow contracts).
+   *(unchanged in Phase 2)*
+3. **JUnit replaced by `phase1Checks`** (see above); test task activation
+   follows in Phase 2. *(Superseded on 2026-09-08: JUnit task active, 39/39.)*
+4. **Push without a real distributor:** `SimulatedPushTrigger` drives the
+   real `PushController` chain; notifications are not rendered.
+   *(Partially superseded on 2026-09-08, Phase 2: `UnifiedPushRegistrar` +
+   `KaiLinkPushReceiver` + manifest receiver are wired;
+   notification rendering remains a limit. Runtime proof: not
+   observed.)*
+5. **Token persistence unencrypted** in the app files directory
+   (app-private, but without Keystore encryption). *(unchanged)*
+6. **Competing agents:** during the write-up, two further
+   opencode agents ran in the same repo and overwrote files; they were
+   stopped, after which the current state was completely re-verified (this
+   report). A commit was deliberately not made.
+   *(Phase 2 note, 2026-09-08: during the follow-up pass the commit
+   `c8125fd` (among others package migration, adapter wiring) appeared externally;
+   it was not changed or written back.)*

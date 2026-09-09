@@ -10,7 +10,7 @@ import android.widget.TextView
 import org.box44.kailink.R
 import org.box44.kailink.domain.model.Room
 
-/** Zeilen-Adapter für die Raumliste (Framework-Views, keine externen UI-Libs). */
+/** Row adapter for the room list (framework views, no external UI libraries). */
 class RoomListAdapter(private val context: Context) : BaseAdapter() {
 
     private var rooms: List<Room> = emptyList()

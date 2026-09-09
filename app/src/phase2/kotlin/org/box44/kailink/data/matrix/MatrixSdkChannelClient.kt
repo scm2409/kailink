@@ -50,13 +50,13 @@ import org.matrix.rustcomponents.sdk.TimelineListener
 import org.box44.kailink.domain.push.PushConfiguration
 
 /**
- * Adapter auf das echte matrix-rust-sdk (org.matrix.rustcomponents:sdk-android).
+ * Adapter onto the real matrix-rust-sdk (org.matrix.rustcomponents:sdk-android).
  *
- * Diese Klasse ist seit Phase 2 Teil des produktiven Builds und in
- * `AppGraph` verdrahtet. Sie übersetzt SDK-Aufrufe/Listener in die
- * Domänennahtstelle [ChannelClient] bzw. in [ChannelEvent]/[TimelinePatch].
- * Abweichendes Verhalten gegenüber der Phase-1-Simulation ist in
- * docs/architecture.md dokumentiert.
+ * Since Phase 2 this class is part of the production build and wired in
+ * `AppGraph`. It translates SDK calls/listeners into the domain seam
+ * [ChannelClient] and into [ChannelEvent]/[TimelinePatch].
+ * Deviating behavior compared to the Phase-1 simulation is documented in
+ * docs/architecture.md.
  */
 class MatrixSdkChannelClient(
     private val sessionStore: SessionStore,
@@ -116,7 +116,7 @@ class MatrixSdkChannelClient(
             sessionStore.clear()
             throw ChannelException(readableFailure(RESTORE_FAILED_LABEL, t), t)
         }
-        return adoptClient(c, source = "Wiederherstellung")
+        return adoptClient(c, source = "Restore")
     }
 
     private suspend fun adoptClient(c: Client, source: String): Session {
@@ -125,7 +125,7 @@ class MatrixSdkChannelClient(
         sessionStore.save(session)
         activeSession = session
         client = c
-        onLog("$source erfolgreich: ${session.userId} @ ${session.homeserverUrl}")
+        onLog("$source succeeded: ${session.userId} @ ${session.homeserverUrl}")
         emitRooms()
         return session
     }
@@ -133,9 +133,9 @@ class MatrixSdkChannelClient(
     private suspend fun buildClient(homeserverUrl: String): Client {
         storeDir.mkdirs()
         cacheDir.mkdirs()
-        // UniFFI-Builder sind immutable (Rust: self: Arc<Self> -> Arc<Self>):
-        // jeder Setter gibt einen NEUEN Builder zurueck; der Rueckgabewert
-        // muss verkettet werden, sonst geht die Einstellung verloren.
+        // UniFFI builders are immutable (Rust: self: Arc<Self> -> Arc<Self>):
+        // every setter returns a NEW builder; the return value must be
+        // chained, otherwise the setting is lost.
         var builder = ClientBuilder()
         builder = builder.homeserverUrl(homeserverUrl)
         builder = builder.sqliteStore(
@@ -156,16 +156,16 @@ class MatrixSdkChannelClient(
     }
 
     /**
-     * Ersetzt rohe Bibliotheksmeldungen durch lesbare Fehler. Der
-     * rustls-platform-verifier-Panic ("Expect rustls-platform-verifier to be
-     * initialized" / "Failed to initialize rustls platform verifier") wird
-     * als InternalException/ClientException mit genau diesem Text über
-     * UniFFI durchgereicht — er bedeutet eine kaputte Plattform-Initialisierung
-     * und darf dem Nutzer nicht als roher Panic angezeigt werden.
+     * Replaces raw library messages with readable errors. The
+     * rustls-platform-verifier panic ("Expect rustls-platform-verifier to be
+     * initialized" / "Failed to initialize rustls platform verifier") is
+     * passed through UniFFI as an InternalException/ClientException with
+     * exactly that text — it means a broken platform initialization and must
+     * not be shown to the user as a raw panic.
      */
     private fun readableFailure(context: String, t: Throwable): String {
         if (isPlatformVerifierInitFailure(t)) return TLS_INIT_FAILED_MESSAGE
-        return "$context: ${t.message ?: "unbekannter Fehler"}"
+        return "$context: ${t.message ?: "unknown error"}"
     }
 
     private fun isPlatformVerifierInitFailure(t: Throwable): Boolean {
@@ -180,23 +180,23 @@ class MatrixSdkChannelClient(
     // ------------------------------------------------------------------ Sync
 
     override suspend fun syncOnce() {
-        val c = client ?: throw ChannelException("Keine aktive Sitzung")
+        val c = client ?: throw ChannelException("No active session")
         c.syncOnceV2(SyncSettingsV2())
         emitRooms()
     }
 
     override suspend fun startLiveSync() {
         if (syncService != null) return
-        val c = client ?: throw ChannelException("Keine aktive Sitzung")
+        val c = client ?: throw ChannelException("No active session")
         val service = try {
             c.syncService().finish()
         } catch (t: Throwable) {
-            throw ChannelException("Live-Sync konnte nicht gestartet werden: ${t.message ?: "unbekannter Fehler"}", t)
+            throw ChannelException("Could not start live sync: ${t.message ?: "unknown error"}", t)
         }
         service.start()
         syncService = service
         _events.emit(ChannelEvent.SyncStateChanged(true))
-        onLog("Live-Sync gestartet")
+        onLog("Live sync started")
     }
 
     override suspend fun stopLiveSync() {
@@ -204,29 +204,29 @@ class MatrixSdkChannelClient(
         syncService = null
         runCatching { service.stop() }
         _events.emit(ChannelEvent.SyncStateChanged(false))
-        onLog("Live-Sync gestoppt")
+        onLog("Live sync stopped")
     }
 
-    // ------------------------------------------------------------------ Räume & Chronik
+    // ------------------------------------------------------------------ Rooms & Timeline
 
     override suspend fun rooms(): List<Room> {
-        val c = client ?: throw ChannelException("Keine aktive Sitzung")
+        val c = client ?: throw ChannelException("No active session")
         return c.rooms().map { sdkRoom ->
             Room(
                 id = sdkRoom.id(),
-                displayName = sdkRoom.displayName().orEmpty().ifBlank { "(unbenannter Raum)" },
+                displayName = sdkRoom.displayName().orEmpty().ifBlank { "(unnamed room)" },
                 isEncrypted = runCatching { sdkRoom.isEncrypted() }.getOrNull() == true,
                 lastMessage = null,
             )
         }.also {
-            onLog("Räume geladen: ${it.size}")
+            onLog("Rooms loaded: ${it.size}")
         }
     }
 
     override suspend fun createRoom(name: String, inviteUserIds: List<String>, encrypted: Boolean): String {
-        val c = client ?: throw ChannelException("Keine aktive Sitzung")
+        val c = client ?: throw ChannelException("No active session")
         val trimmed = name.trim()
-        if (trimmed.isEmpty()) throw ChannelException("Leerer Raumname")
+        if (trimmed.isEmpty()) throw ChannelException("Empty room name")
         val parameters = CreateRoomParameters(
             name = trimmed,
             isEncrypted = encrypted,
@@ -236,35 +236,35 @@ class MatrixSdkChannelClient(
         )
         return try {
             val roomId = c.createRoom(parameters)
-            onLog("Raum erstellt: $roomId")
+            onLog("Room created: $roomId")
             emitRooms()
             roomId
         } catch (t: Throwable) {
-            throw ChannelException("Raumerstellung fehlgeschlagen: ${t.message ?: "unbekannter Fehler"}", t)
+            throw ChannelException("Room creation failed: ${t.message ?: "unknown error"}", t)
         }
     }
 
     override suspend fun joinRoom(roomId: String) {
-        val c = client ?: throw ChannelException("Keine aktive Sitzung")
+        val c = client ?: throw ChannelException("No active session")
         try {
             c.joinRoomById(roomId)
-            onLog("Raum beigetreten: $roomId")
+            onLog("Room joined: $roomId")
             emitRooms()
         } catch (t: Throwable) {
-            throw ChannelException("Raumbeitritt fehlgeschlagen: ${t.message ?: "unbekannter Fehler"}", t)
+            throw ChannelException("Room join failed: ${t.message ?: "unknown error"}", t)
         }
     }
 
     override suspend fun openTimeline(roomId: String) {
-        val c = client ?: throw ChannelException("Keine aktive Sitzung")
+        val c = client ?: throw ChannelException("No active session")
         if (timelines.containsKey(roomId)) return
         val room: SdkRoom? = try {
             c.getRoom(roomId)
         } catch (t: Throwable) {
-            throw ChannelException("Raum nicht gefunden: $roomId", t)
+            throw ChannelException("Room not found: $roomId", t)
         }
         val timeline = room?.timeline()
-            ?: throw ChannelException("Raum nicht gefunden: $roomId")
+            ?: throw ChannelException("Room not found: $roomId")
         val messages = mutableListOf<Message>()
         val listener = object : TimelineListener {
             override fun onUpdate(diffs: List<TimelineDiff>) {
@@ -276,7 +276,7 @@ class MatrixSdkChannelClient(
                         messages.addAll(updated)
                         _events.emit(ChannelEvent.TimelineUpdated(roomId, messages.toList()))
                     } catch (t: Throwable) {
-                        onLog("Chronik-Update fehlgeschlagen: ${t.message}")
+                        onLog("Timeline update failed: ${t.message}")
                     }
                 }
             }
@@ -285,47 +285,47 @@ class MatrixSdkChannelClient(
             timeline.addListener(listener)
         } catch (t: Throwable) {
             runCatching { timeline.close() }
-            throw ChannelException("Chronik konnte nicht geöffnet werden: ${t.message ?: "unbekannter Fehler"}", t)
+            throw ChannelException("Could not open timeline: ${t.message ?: "unknown error"}", t)
         }
         timelines[roomId] = TimelineSubscription(timeline, listener, handle)
-        onLog("Chronik abonniert: $roomId")
+        onLog("Timeline subscribed: $roomId")
     }
 
     override suspend fun closeTimeline(roomId: String) {
         timelines.remove(roomId)?.let { subscription ->
             runCatching { subscription.handle?.close() }
             runCatching { subscription.timeline.close() }
-            onLog("Chronik abbestellt: $roomId")
+            onLog("Timeline unsubscribed: $roomId")
         }
     }
 
     override suspend fun sendMessage(roomId: String, body: String) {
         val trimmed = body.trim()
-        if (trimmed.isEmpty()) throw ChannelException("Leere Nachricht")
+        if (trimmed.isEmpty()) throw ChannelException("Empty message")
         val subscription = timelines[roomId]
         val timeline: Timeline = subscription?.timeline ?: run {
             openTimeline(roomId)
-            timelines[roomId]?.timeline ?: throw ChannelException("Chronik nicht geöffnet: $roomId")
+            timelines[roomId]?.timeline ?: throw ChannelException("Timeline not open: $roomId")
         }
         try {
             val content = timeline.createMessageContent(MessageType.Text(TextMessageContent(trimmed, null)))
-                ?: throw ChannelException("Nachrichteninhalt konnte nicht erzeugt werden")
+                ?: throw ChannelException("Could not create message content")
             timeline.send(content)
-            onLog("Nachricht an Send-Queue übergeben: $roomId")
+            onLog("Message handed to send queue: $roomId")
         } catch (t: Throwable) {
-            throw ChannelException("Senden fehlgeschlagen: ${t.message ?: "unbekannter Fehler"}", t)
+            throw ChannelException("Send failed: ${t.message ?: "unknown error"}", t)
         }
     }
 
     // ------------------------------------------------------------------ Push
 
     override suspend fun registerPushEndpoint(endpointUrl: String) {
-        val c = client ?: throw ChannelException("Keine aktive Sitzung")
+        val c = client ?: throw ChannelException("No active session")
         try {
-            // Push-Gateway-Trennung (docs/features/push.md): der UnifiedPush-
-            // Endpoint ist der `pushkey`, das HttpPusherData zeigt auf das
-            // Matrix-Push-Gateway ([gatewayUrl], Standard: ntfy), das die
-            // Matrix-Push-Nachricht an den Distributor übersetzt.
+            // Push gateway separation (docs/features/push.md): the UnifiedPush
+            // endpoint is the `pushkey`; the HttpPusherData points to the
+            // Matrix push gateway ([gatewayUrl], default: ntfy), which
+            // translates the Matrix push message for the distributor.
             val identifiers = PusherIdentifiers(pushkey = endpointUrl, appId = appId)
             val data = HttpPusherData(gatewayUrl, PushFormat.EVENT_ID_ONLY, null)
             c.setPusher(
@@ -337,18 +337,18 @@ class MatrixSdkChannelClient(
                 LANG,
                 true,
             )
-            onLog("UnifiedPush-Endpoint als Matrix-Pusher registriert (Gateway: $gatewayUrl)")
+            onLog("UnifiedPush endpoint registered as Matrix pusher (gateway: $gatewayUrl)")
         } catch (t: Throwable) {
-            throw ChannelException("Pusher-Registrierung fehlgeschlagen: ${t.message ?: "unbekannter Fehler"}", t)
+            throw ChannelException("Pusher registration failed: ${t.message ?: "unknown error"}", t)
         }
     }
 
-    // ------------------------------------------------------------------ Lebenszyklus
+    // ------------------------------------------------------------------ Lifecycle
 
     override suspend fun logout() {
         sessionStore.clear()
         closeExisting()
-        onLog("Lokal abgemeldet")
+        onLog("Signed out locally")
     }
 
     override fun dispose() {
@@ -373,10 +373,10 @@ class MatrixSdkChannelClient(
     private suspend fun emitRooms() {
         runCatching { rooms() }
             .onSuccess { _events.emit(ChannelEvent.RoomsUpdated(it)) }
-            .onFailure { _events.emit(ChannelEvent.ClientError(it.message ?: "Räume konnten nicht geladen werden")) }
+            .onFailure { _events.emit(ChannelEvent.ClientError(it.message ?: "Could not load rooms")) }
     }
 
-    // ------------------------------------------------------------------ Abbildung SDK → Domäne
+    // ------------------------------------------------------------------ Mapping SDK → Domain
 
     private fun toDomainSession(sdk: SdkSession): Session = Session(
         userId = sdk.userId,
@@ -448,7 +448,7 @@ class MatrixSdkChannelClient(
                 else -> null
             }
         } catch (t: Throwable) {
-            onLog("Chronikelement konnte nicht übersetzt werden: ${t.message}")
+            onLog("Could not map timeline item: ${t.message}")
             null
         }
     }
@@ -458,14 +458,14 @@ class MatrixSdkChannelClient(
         private const val APP_DISPLAY_NAME = "KaiLink"
         private const val DEVICE_DISPLAY_NAME = "KaiLink Android"
         private const val PROFILE_TAG = "kailink"
-        private const val LANG = "de"
-        private const val UNDECRYPTABLE_PLACEHOLDER = "(verschlüsselt — kann nicht entschlüsselt werden)"
+        private const val LANG = "en"
+        private const val UNDECRYPTABLE_PLACEHOLDER = "(encrypted — cannot be decrypted)"
         private const val PLATFORM_VERIFIER_MARKER = "rustls-platform-verifier"
         private const val TLS_INIT_FAILED_MESSAGE =
-            "Sichere Verbindung konnte nicht initialisiert werden (TLS-Verifizierung). " +
-                "Bitte App aktualisieren oder neu installieren."
-        private const val LOGIN_FAILED_LABEL = "Anmeldung fehlgeschlagen"
-        private const val RESTORE_FAILED_LABEL = "Sitzung konnte nicht wiederhergestellt werden"
-        private const val CONNECT_FAILED_LABEL = "Verbindung zum Homeserver nicht möglich"
+            "Could not initialize the secure connection (TLS verification). " +
+                "Please update or reinstall the app."
+        private const val LOGIN_FAILED_LABEL = "Sign-in failed"
+        private const val RESTORE_FAILED_LABEL = "Could not restore session"
+        private const val CONNECT_FAILED_LABEL = "Could not connect to homeserver"
     }
 }

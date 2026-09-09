@@ -23,10 +23,10 @@ data class TimelineUiState(
 )
 
 /**
- * Chronik eines Raums; bezieht Nachrichten aus [ChannelEvent.TimelineUpdated]
- * (der Adapter wendet die SDK-Diffs über TimelineReducer an). Reine
- * Kotlin-Klasse ohne Android-/Lifecycle-Abhängigkeit; der CoroutineScope ist
- * injizierbar, damit JVM-Prüfungen deterministisch laufen.
+ * Timeline of a room; sources messages from [ChannelEvent.TimelineUpdated]
+ * (the adapter applies the SDK diffs via TimelineReducer). Pure
+ * Kotlin class without Android/Lifecycle dependencies; the CoroutineScope is
+ * injectable so that JVM checks run deterministically.
  */
 class TimelineViewModel(
     private val roomId: String,
@@ -58,7 +58,7 @@ class TimelineViewModel(
                 channelClient.syncOnce()
             } catch (t: Throwable) {
                 _ui.update {
-                    it.copy(loading = false, error = t.message ?: "Chronik konnte nicht geladen werden")
+                    it.copy(loading = false, error = t.message ?: "Could not load timeline")
                 }
             }
         }
@@ -77,7 +77,7 @@ class TimelineViewModel(
                 _ui.update { it.copy(sending = false) }
             } catch (t: Throwable) {
                 _ui.update {
-                    it.copy(sending = false, draft = body, error = t.message ?: "Senden fehlgeschlagen")
+                    it.copy(sending = false, draft = body, error = t.message ?: "Send failed")
                 }
             }
         }

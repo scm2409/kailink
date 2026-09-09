@@ -7,14 +7,14 @@ import java.io.FileNotFoundException
 import java.util.Properties
 
 /**
- * Dateibasierte Sitzungspersistenz (App-privates Verzeichnis) als reine
- * JVM-Referenz für Prüfungen (`FileSessionStoreChecks`) und als
- * Referenzimplementierung des [SessionStore]-Vertrags.
+ * File-based session persistence (app-private directory) as a pure
+ * JVM reference for checks (`FileSessionStoreChecks`) and as a
+ * reference implementation of the [SessionStore] contract.
  *
- * Produktive Verdrahtung (Android): [AndroidKeystoreSessionStore] verschlüsselt
- * denselben Eigenschaften-Block mit einem nicht exportierbaren
- * AndroidKeyStore-Schlüssel (AES/GCM). Diese Klasse selbst speichert
- * unverschlüsselt und ist bewusst nicht in `AppGraph` verdrahtet.
+ * Production wiring (Android): [AndroidKeystoreSessionStore] encrypts
+ * the same properties block with a non-exportable
+ * AndroidKeyStore key (AES/GCM). This class itself stores
+ * unencrypted and is deliberately not wired in `AppGraph`.
  */
 class FileSessionStore(
     private val file: File,

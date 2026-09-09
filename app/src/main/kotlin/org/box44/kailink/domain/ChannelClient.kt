@@ -5,10 +5,10 @@ import org.box44.kailink.domain.model.Room
 import org.box44.kailink.domain.model.Session
 import kotlinx.coroutines.flow.Flow
 
-/** Fehler mit deutscher Nutzerbotschaft aus der Kanalschicht. */
+/** Error with a user-facing message from the channel layer. */
 class ChannelException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-/** Ereignisse, die ein [ChannelClient] an die UI-Schicht meldet. */
+/** Events reported by a [ChannelClient] to the UI layer. */
 sealed interface ChannelEvent {
     data class RoomsUpdated(val rooms: List<Room>) : ChannelEvent
     data class TimelineUpdated(val roomId: String, val messages: List<Message>) : ChannelEvent
@@ -17,58 +17,58 @@ sealed interface ChannelEvent {
 }
 
 /**
- * Nahtstelle zwischen UI/Logik und einem Nachrichtendienst (Matrix).
+ * Seam between UI/logic and a messaging service (Matrix).
  *
- * Implementierungen: `MatrixSdkChannelClient` (echtes matrix-rust-sdk,
- * produktionsnah) und `FakeChannelClient` (JVM-Tests).
- * Die Schnittstelle ist bewusst frei von Android- und SDK-Typen (G4).
+ * Implementations: `MatrixSdkChannelClient` (real matrix-rust-sdk,
+ * production-like) and `FakeChannelClient` (JVM tests).
+ * The interface is deliberately free of Android and SDK types (G4).
  */
 interface ChannelClient {
-    /** Ereignisstrom; auf beliebigem Thread emittiert. */
+    /** Event stream; emitted on an arbitrary thread. */
     val events: Flow<ChannelEvent>
 
-    /** Aktive Sitzung oder null, wenn nicht angemeldet. */
+    /** Active session or null if not signed in. */
     val activeSession: Session?
 
-    /** Neues Login (ersetzt eine vorhandene Sitzung). */
+    /** New login (replaces an existing session). */
     suspend fun login(homeserverUrl: String, username: String, password: String): Session
 
-    /** Wiederherstellung aus einer gespeicherten [Session]. */
+    /** Restore from a stored [Session]. */
     suspend fun restore(session: Session): Session
 
-    /** Einmaliger Abgleich mit dem Server. */
+    /** One-shot sync with the server. */
     suspend fun syncOnce()
 
-    /** Startet den Live-Sync im Vordergrund (idempotent). */
+    /** Starts foreground live sync (idempotent). */
     suspend fun startLiveSync()
 
-    /** Stoppt den Live-Sync (idempotent). */
+    /** Stops live sync (idempotent). */
     suspend fun stopLiveSync()
 
-    /** Aktuelle Raumliste. */
+    /** Current room list. */
     suspend fun rooms(): List<Room>
 
-    /** Erstellt einen Raum (optional Einladungen, optional E2EE) und gibt die Raum-ID zurück. */
+    /** Creates a room (optional invites, optional E2EE) and returns the room ID. */
     suspend fun createRoom(name: String, inviteUserIds: List<String>, encrypted: Boolean): String
 
-    /** Tritt einem Raum über seine Raum-ID bei. */
+    /** Joins a room via its room ID. */
     suspend fun joinRoom(roomId: String)
 
-    /** Abonniert die Chronik eines Raums (idempotent). */
+    /** Subscribes to a room's timeline (idempotent). */
     suspend fun openTimeline(roomId: String)
 
-    /** Gibt ein Chronik-Abo frei. */
+    /** Releases a timeline subscription. */
     suspend fun closeTimeline(roomId: String)
 
-    /** Sendet eine Textnachricht (Send-Queue des SDK). */
+    /** Sends a text message (SDK send queue). */
     suspend fun sendMessage(roomId: String, body: String)
 
-    /** Meldet einen UnifiedPush-Endpoint als Matrix-Pusher an. */
+    /** Registers a UnifiedPush endpoint as a Matrix pusher. */
     suspend fun registerPushEndpoint(endpointUrl: String)
 
-    /** Lokale Abmeldung (PoC: Gerät bleibt serverseitig aktiv). */
+    /** Local sign-out (PoC: device stays active server-side). */
     suspend fun logout()
 
-    /** Gibt alle SDK-Ressourcen frei. */
+    /** Releases all SDK resources. */
     fun dispose()
 }

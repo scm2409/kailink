@@ -6,9 +6,9 @@ import org.box44.kailink.domain.model.MessageDirection
 import org.box44.kailink.domain.model.Room
 
 /**
- * Reine Nutzdaten einer Push-Benachrichtigung (keine Android-Typen,
- * JVM-testbar). Das Android-Rendern passiert in [PushNotifier]; diese
- * Klasse entscheidet nur Titel und Text.
+ * Pure payload of a push notification (no Android types,
+ * JVM-testable). Android rendering happens in [PushNotifier]; this
+ * class only decides title and text.
  */
 data class PushNotificationPayload(
     val roomId: String?,
@@ -19,15 +19,15 @@ data class PushNotificationPayload(
 
         const val FALLBACK_TITLE = "KaiLink"
 
-        const val UNDECRYPTABLE_TEXT = "(verschlüsselt — kann nicht entschlüsselt werden)"
+        const val UNDECRYPTABLE_TEXT = "(encrypted — cannot be decrypted)"
 
-        const val EMPTY_BODY_TEXT = "(leere Nachricht)"
+        const val EMPTY_BODY_TEXT = "(empty message)"
 
         /**
-         * Wählt aus der zuletzt synchronisierten Raumliste die Nutzdaten für
-         * eine Benachrichtigung: der Raum mit der jüngsten eingehenden
-         * Nachricht. `null`, wenn es nichts Benachrichtigungswürdiges gibt
-         * (leere Liste, keine eingehenden Nachrichten).
+         * Picks the payload for a notification from the most recently
+         * synchronized room list: the room with the most recent incoming
+         * message. `null` if there is nothing worth notifying about
+         * (empty list, no incoming messages).
          */
         fun fromLatest(rooms: List<Room>): PushNotificationPayload? {
             val candidate = rooms
@@ -37,7 +37,7 @@ data class PushNotificationPayload(
             return from(candidate, message)
         }
 
-        /** Nutzdaten aus Raum und Nachricht (Vorschau: „Absender: Text"). */
+        /** Payload from room and message (preview: "sender: text"). */
         fun from(room: Room?, message: Message): PushNotificationPayload {
             val title = room?.displayName?.takeIf { it.isNotBlank() }
                 ?: room?.id?.takeIf { it.isNotBlank() }

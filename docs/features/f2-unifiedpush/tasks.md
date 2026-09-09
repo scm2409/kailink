@@ -1,15 +1,15 @@
 # f2-unifiedpush – tasks.md
 
-Erledigt (Phase 1):
+Done (Phase 1):
 
-- [x] `PushState`/`PushRegistrationTrigger`-Nahtstellen in der Domäne.
-- [x] `PushController`-Zustandsautomat (JVM-geprüft).
-- [x] `SimulatedPushTrigger` inkl. Push→Sync-Pfad (JVM-geprüft).
-- [x] Anzeige des Push-Zustands in der Raumliste.
+- [x] `PushState`/`PushRegistrationTrigger` seams in the domain.
+- [x] `PushController` state machine (JVM-checked).
+- [x] `SimulatedPushTrigger` incl. push→sync path (JVM-checked).
+- [x] Display of the push state in the room list.
 
-Offen (Phase 2):
+Open (Phase 2):
 
-- [x] UnifiedPush-Connector einbinden (Trigger + Receiver + Manifest).
+- [x] Integrate the UnifiedPush connector (trigger + receiver + manifest).
       *(2026-09-08: `UnifiedPushRegistrar`, `KaiLinkPushReceiver`,
-      Manifest-Eintrag; kompiliert, Tests 39/39.)*
-- [ ] NotificationClient-Verdrahtung (Benachrichtigungen) – optional.
+      manifest entry; compiles, tests 39/39.)*
+- [ ] NotificationClient wiring (notifications) – optional.

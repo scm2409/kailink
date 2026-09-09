@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-command -v podman >/dev/null || { echo "Podman fehlt; E2E nicht ausgeführt." >&2; exit 2; }
-command -v curl >/dev/null || { echo "curl fehlt; E2E nicht ausgeführt." >&2; exit 2; }
+command -v podman >/dev/null || { echo "Podman missing; E2E not executed." >&2; exit 2; }
+command -v curl >/dev/null || { echo "curl missing; E2E not executed." >&2; exit 2; }
 conduit_container="kailink-e2e-conduit"
 ntfy_container="kailink-e2e-ntfy"
 conduit_image="docker.io/matrixconduit/matrix-conduit:latest"
@@ -32,11 +32,11 @@ for _ in $(seq 1 60); do
   if curl -fsS "$base_url/_matrix/client/versions" >/dev/null 2>&1; then ready=true; break; fi
   sleep 2
 done
-$ready || { echo "Conduit wurde nicht bereit." >&2; podman logs "$conduit_container" >&2; exit 1; }
+$ready || { echo "Conduit did not become ready." >&2; podman logs "$conduit_container" >&2; exit 1; }
 curl -fsS "$ntfy_url/" >/dev/null
-printf '%s\n' 'E2E-Smoke bestanden: Matrix-Homeserver und lokales ntfy erreichbar.'
+printf '%s\n' 'E2E smoke passed: Matrix homeserver and local ntfy reachable.'
 register_user() { curl -fsS -X POST "$base_url/_matrix/client/v3/register" -H 'content-type: application/json' -d "{\"username\":\"$1\",\"password\":\"$2\",\"auth\":{\"type\":\"m.login.dummy\"}}" >/dev/null; }
 register_user kailink_alice 'phase1-e2e-alice'
 register_user kailink_bob 'phase1-e2e-bob'
-printf '%s\n' 'E2E-Registrierung bestanden: zwei disposable Testkonten angelegt.'
-printf '%s\n' 'SDK-Login/Restore, E2EE-Entschlüsselung, Matrix-Pusher, Push-Sync und Android-Benachrichtigung bleiben ohne Android-Runtime ungetestet.'
+printf '%s\n' 'E2E registration passed: two disposable test accounts created.'
+printf '%s\n' 'SDK login/restore, E2EE decryption, Matrix pusher, push sync and Android notification remain untested without an Android runtime.'

@@ -1,19 +1,19 @@
 # f1-matrix-text – tasks.md
 
-Erledigt (Phase 1):
+Done (Phase 1):
 
-- [x] Domänentypen Session/Room/Message, `ChannelClient`, `SessionStore`.
-- [x] `TimelineReducer` mit Zwischenständen (JVM-geprüft).
-- [x] `InMemoryChannelClient` mit Demoräumen, Login/Restore, Senden.
-- [x] ViewModels Login/Raumliste/Chronik (StateFlow, JVM-geprüft).
-- [x] UI mit Framework-Views (Anmeldung, Raumliste, Chronik).
+- [x] Domain types Session/Room/Message, `ChannelClient`, `SessionStore`.
+- [x] `TimelineReducer` with intermediate states (JVM-checked).
+- [x] `InMemoryChannelClient` with demo rooms, login/restore, sending.
+- [x] ViewModels login/room list/timeline (StateFlow, JVM-checked).
+- [x] UI with framework Views (login, room list, timeline).
 
-Offen (Phase 2):
+Open (Phase 2):
 
-- [x] Adaptertausch auf `MatrixSdkChannelClient` (matrix-rust-sdk).
-      *(2026-09-08: kompilierfähiger Adapter im Build, in `AppGraph`
-      verdrahtet; Laufzeit gegen echten Homeserver noch nicht beobachtet.)*
-- [ ] E2EE: Krypto-Store, Unable-to-Decrypt-Darstellung.
-      *(Teilstand 2026-09-08: SQLite-Store konfiguriert,
-      UTD-Erkennung im Adapter vorhanden — Verifizierung offen.)*
-- [ ] Compose-Umstellung der Screens (ViewModels bleiben).
+- [x] Adapter swap to `MatrixSdkChannelClient` (matrix-rust-sdk).
+      *(2026-09-08: compilable adapter in the build, wired into `AppGraph`;
+      runtime against a real homeserver not yet observed.)*
+- [ ] E2EE: crypto store, Unable-to-Decrypt representation.
+      *(Partial status 2026-09-08: SQLite store configured,
+      UTD detection present in the adapter — verification open.)*
+- [ ] Compose migration of the screens (ViewModels remain).
