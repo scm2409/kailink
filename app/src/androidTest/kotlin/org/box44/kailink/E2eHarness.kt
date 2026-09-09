@@ -35,6 +35,15 @@ class E2eHarness(
     fun requireHomeserver(): String = arguments.getString(ARG_HOMESERVER)?.trim()?.takeIf { it.isNotEmpty() }
         ?: throw AssumptionViolatedException("e2e.homeserver fehlt")
 
+    /**
+     * HTTPS-Homeserver-Endpunkt für den TLS-Pfad-Test (rustls), z. B.
+     * `https://127.0.0.1:8443` (via adb reverse auf einen echten TLS-Server
+     * mit selbstsigniertem Zertifikat). Fehlt das Argument, wird der Test
+     * übersprungen statt fehlschlagen.
+     */
+    fun tlsHomeserver(): String = arguments.getString(ARG_TLS_HOMESERVER)?.trim()?.takeIf { it.isNotEmpty() }
+        ?: throw AssumptionViolatedException("e2e.tls_homeserver fehlt")
+
     /** Basis-URL des Matrix-Push-Gateways aus Conduit-Sicht (Container-Netz). */
     fun pusherGatewayBase(): String =
         arguments.getString(ARG_PUSHER_GATEWAY)?.trim()?.takeIf { it.isNotEmpty() }
@@ -153,6 +162,7 @@ class E2eHarness(
 
         private const val TAG = "KaiLinkE2E"
         private const val ARG_HOMESERVER = "e2e.homeserver"
+        private const val ARG_TLS_HOMESERVER = "e2e.tls_homeserver"
         private const val ARG_PUSHER_GATEWAY = "e2e.pusher_gateway"
         private const val ARG_USERNAME = "e2e.username"
         private const val ARG_PASSWORD = "e2e.password"

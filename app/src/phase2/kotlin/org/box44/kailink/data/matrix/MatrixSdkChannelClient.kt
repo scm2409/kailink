@@ -101,7 +101,7 @@ class MatrixSdkChannelClient(
             c.login(username.trim(), password, DEVICE_NAME, null)
         } catch (t: Throwable) {
             runCatching { c.close() }
-            throw ChannelException("Anmeldung fehlgeschlagen: ${t.message ?: "unbekannter Fehler"}", t)
+            throw ChannelException(readableFailure(LOGIN_FAILED_LABEL, t), t)
         }
         return adoptClient(c, source = "Login")
     }
@@ -114,7 +114,7 @@ class MatrixSdkChannelClient(
         } catch (t: Throwable) {
             runCatching { c.close() }
             sessionStore.clear()
-            throw ChannelException("Sitzung konnte nicht wiederhergestellt werden: ${t.message ?: "unbekannter Fehler"}", t)
+            throw ChannelException(readableFailure(RESTORE_FAILED_LABEL, t), t)
         }
         return adoptClient(c, source = "Wiederherstellung")
     }
@@ -151,8 +151,30 @@ class MatrixSdkChannelClient(
         return try {
             builder.build()
         } catch (t: Throwable) {
-            throw ChannelException("Verbindung zum Homeserver nicht möglich: ${t.message ?: "unbekannter Fehler"}", t)
+            throw ChannelException(readableFailure(CONNECT_FAILED_LABEL, t), t)
         }
+    }
+
+    /**
+     * Ersetzt rohe Bibliotheksmeldungen durch lesbare Fehler. Der
+     * rustls-platform-verifier-Panic ("Expect rustls-platform-verifier to be
+     * initialized" / "Failed to initialize rustls platform verifier") wird
+     * als InternalException/ClientException mit genau diesem Text über
+     * UniFFI durchgereicht — er bedeutet eine kaputte Plattform-Initialisierung
+     * und darf dem Nutzer nicht als roher Panic angezeigt werden.
+     */
+    private fun readableFailure(context: String, t: Throwable): String {
+        if (isPlatformVerifierInitFailure(t)) return TLS_INIT_FAILED_MESSAGE
+        return "$context: ${t.message ?: "unbekannter Fehler"}"
+    }
+
+    private fun isPlatformVerifierInitFailure(t: Throwable): Boolean {
+        var current: Throwable? = t
+        while (current != null) {
+            if (current.message?.contains(PLATFORM_VERIFIER_MARKER) == true) return true
+            current = current.cause
+        }
+        return false
     }
 
     // ------------------------------------------------------------------ Sync
@@ -438,5 +460,12 @@ class MatrixSdkChannelClient(
         private const val PROFILE_TAG = "kailink"
         private const val LANG = "de"
         private const val UNDECRYPTABLE_PLACEHOLDER = "(verschlüsselt — kann nicht entschlüsselt werden)"
+        private const val PLATFORM_VERIFIER_MARKER = "rustls-platform-verifier"
+        private const val TLS_INIT_FAILED_MESSAGE =
+            "Sichere Verbindung konnte nicht initialisiert werden (TLS-Verifizierung). " +
+                "Bitte App aktualisieren oder neu installieren."
+        private const val LOGIN_FAILED_LABEL = "Anmeldung fehlgeschlagen"
+        private const val RESTORE_FAILED_LABEL = "Sitzung konnte nicht wiederhergestellt werden"
+        private const val CONNECT_FAILED_LABEL = "Verbindung zum Homeserver nicht möglich"
     }
 }

@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "KaiLink"
 include(":app")
+include(":rustls-tls")

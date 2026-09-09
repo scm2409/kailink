@@ -75,6 +75,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.matrix.rustcomponents:sdk-android:26.09.08")
     implementation("org.unifiedpush.android:connector:3.3.5")
+    implementation(project(":rustls-tls"))
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:runner:1.6.2")
