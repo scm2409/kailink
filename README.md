@@ -1,3 +1,10 @@
+# Disclaimer
+
+KaiLink is vibecoded (AI-assisted). It is a personal project of the
+repository owner and is not intended as a general-purpose Matrix client,
+but it may still serve as a starting point or provide helpful code for
+someone building their own client.
+
 # KaiLink
 
 KaiLink is a proof of concept (PoC) of an Android messenger based on
