@@ -11,8 +11,11 @@ https://unifiedpush.org/developers/spec/android/), and the ntfy Android
 distributor (state per `docs/decisions.md` provenance table). **No log
 lines are invented**; every quoted string appears verbatim in the source
 files named below. If a failure has no current log line, it is marked
-`no log line emitted — gap` — these are documentation only; no code was
-added for them.
+`no log line emitted — gap` — these are documentation only. Authorized
+exception (0.2.7-phase1 investigation): the registrar-path distributor
+gaps (failure modes 1 and 2) received diagnostic-only log lines in
+`UnifiedPushRegistrar` (behavior unchanged); those former gaps now carry
+exact log lines below.
 
 ## Prerequisites (device)
 
@@ -43,10 +46,20 @@ resolved against the distributors installed on the device:
 | `ResolvedDistributor.ToSelect` | Deterministically picks the **first** distributor reported by `UnifiedPush.getDistributors(context)`, saves it (`UnifiedPush.saveDistributor`), then `register()`. Documented PoC limitation: no user-facing distributor picker (KDoc of `UnifiedPushRegistrar`). |
 | `ResolvedDistributor.NoneAvailable` | `controller.onNoDistributor()` → `PushState.NOT_AVAILABLE`; room list shows "Push: no distributor found". |
 
+Since the authorized diagnostic change (0.2.7-phase1), every branch emits
+a DEBUG log line through the `AppGraph.log` seam (see "Exact log lines"):
+`Found` names the resolved distributor package in the pre-register line;
+`ToSelect` with an **empty** `getDistributors` list logs the no-distributor
+line and behaves like `NoneAvailable` (`onNoDistributor()`); `NoneAvailable`
+logs its no-distributor line.
+
 ### Step 3 — The registration broadcast to the distributor
 
 `register()` first sets `PushState.READY` (room list shows
-"Push: registering …"), then calls `UnifiedPush.register(context)`. The
+"Push: registering …"), then calls `UnifiedPush.register(context)`.
+Around that call two diagnostic DEBUG lines land in the log: one
+immediately before `UnifiedPush.register(context)` naming the resolved
+distributor package, one immediately after the call returns. The
 connector sends the broadcast action
 
 ```
@@ -125,6 +138,10 @@ appear in the DebugLog buffer.
 
 | Exact string | Source | Where |
 | --- | --- | --- |
+| `UnifiedPush registration: calling UnifiedPush.register (distributor: <packageName>)` | `UnifiedPushRegistrar.register` — immediately before `UnifiedPush.register(context)`; `<packageName>` is `ResolvedDistributor.Found.packageName` or the auto-picked distributor (ToSelect branch) | DebugLog + logcat |
+| `UnifiedPush registration: UnifiedPush.register returned (distributor: <packageName>)` | `UnifiedPushRegistrar.register` — immediately after `UnifiedPush.register(context)` returns (before any distributor reply broadcast) | DebugLog + logcat |
+| `UnifiedPush registration: no distributor found (NoneAvailable)` | `UnifiedPushRegistrar.tryRegister` (`ResolvedDistributor.NoneAvailable`) | DebugLog + logcat |
+| `UnifiedPush registration: no distributor found (ToSelect, distributor list empty)` | `UnifiedPushRegistrar.tryRegister` (`ResolvedDistributor.ToSelect` and `UnifiedPush.getDistributors(context)` empty) | DebugLog + logcat |
 | `Push endpoint registered as Matrix pusher` | `PushController.onNewEndpoint` (success after `registerPushEndpoint`) | DebugLog + logcat |
 | `UnifiedPush endpoint registered as Matrix pusher (gateway: $gatewayUrl)` | `MatrixSdkChannelClient.registerPushEndpoint` (success) | DebugLog + logcat |
 | `Pusher registration failed: ${t.message}` | `PushController.onNewEndpoint` (catch) — `t.message` wraps `MatrixSdkChannelClient`'s `ChannelException("Pusher registration failed: …")` | DebugLog + logcat |
@@ -148,23 +165,39 @@ appear in the DebugLog buffer.
 `PushController.onNoDistributor()` → `PushState.NOT_AVAILABLE`. The room
 list shows "Push: no distributor found"; the app remains fully usable.
 
-no log line emitted — gap
+Log line (exact, since the authorized 0.2.7-phase1 diagnostic change):
+
+```
+UnifiedPush registration: no distributor found (NoneAvailable)
+```
 
 ### 2. Another distributor selected (not ntfy)
 
-Two sub-cases, both without a distributor-specific log line:
+Three sub-cases:
 
 - KaiLink auto-picks: with several distributors installed and none chosen,
   the registrar deterministically saves and uses the first reported
   distributor (`ResolvedDistributor.ToSelect` branch). If that is not
   ntfy (e.g. NextPush), the chain still works — endpoint and pusher log
-  lines appear as usual, nothing identifies which distributor was chosen.
+  lines appear as usual. Since the authorized 0.2.7-phase1 diagnostic
+  change, the chosen distributor is named in the pre-register line
+  (`UnifiedPush registration: calling UnifiedPush.register
+  (distributor: <packageName>)`).
 - The user changes the default distributor later: the connector delivers
   `UNREGISTERED` (→ `Push registration revoked by the distributor`) and
   endpoint events from the new distributor arrive after the next
   registration.
+- `ResolvedDistributor.ToSelect` is returned but
+  `UnifiedPush.getDistributors(context)` is empty (distributor uninstalled
+  between resolution queries, or the connector's cached state disagrees
+  with the package manager): behaves like `NoneAvailable`
+  (`onNoDistributor()` → `PushState.NOT_AVAILABLE`). Log line (exact):
+  `UnifiedPush registration: no distributor found (ToSelect, distributor list empty)`.
 
-no log line emitted — gap (no line names the selected distributor)
+Former gap (no line names the selected distributor) — closed for the
+auto-pick path by the pre-register line above; the later distributor
+change (second sub-case) still has no distributor-specific log line of
+its own, only the generic `UNREGISTERED` handling.
 
 ### 3. Registration rejected by the distributor
 

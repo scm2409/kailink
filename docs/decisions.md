@@ -120,6 +120,20 @@
   delivered, the push state stays READY ("Push: registering …") and
   **no log line is emitted** (all documented as gaps).
 
+- Authorized diagnostic-only change (0.2.7-phase1 UnifiedPush emulator
+  investigation): `UnifiedPushRegistrar` now takes the standard
+  `onLog: (String) -> Unit = {}` seam (wired to `AppGraph.log` in
+  `AppGraph`, like `PushController`) and emits four DEBUG lines — before
+  `UnifiedPush.register(context)` with the resolved distributor package
+  name, after the call returns, and a no-distributor line for both
+  `NoneAvailable` and `ToSelect`-with-empty-list. Registration behavior,
+  control flow, and dependencies are unchanged; the log lines are not
+  credentials (G7). Exact strings live in
+  `docs/features/f2-unifiedpush/device-registration-checklist.md`; this
+  closes the checklist's former "no distributor / unnamed distributor"
+  log gaps. The `TEMP_UNAVAILABLE` and missing-`POST_ENDPOINTS` gaps
+  above remain deliberately unfixed.
+
 ## 0.2.5-phase1: native sliding sync discovery (live-sync fix)
 
 Root cause (0.2.4-phase1 behavior): the FFI `ClientBuilder` of the pinned

@@ -62,7 +62,7 @@ class AppGraph(private val appContext: Context) {
         onLog = ::log,
     )
 
-    val pushTrigger: PushRegistrationTrigger = UnifiedPushRegistrar(appContext, pushController)
+    val pushTrigger: PushRegistrationTrigger = UnifiedPushRegistrar(appContext, pushController, onLog = ::log)
 
     /**
      * Real push→notification path of the receiver: payload parse →
