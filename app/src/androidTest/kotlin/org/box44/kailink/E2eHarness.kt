@@ -103,7 +103,7 @@ class E2eHarness(
 
     /** GET without auth as text (for C2b: ntfy topic cache). */
     fun httpGetText(url: String, timeoutMillis: Int = 10_000): String {
-        val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+        val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = timeoutMillis
             connection.readTimeout = timeoutMillis
@@ -111,6 +111,31 @@ class E2eHarness(
             val code = connection.responseCode
             if (code !in 200..299) return "HTTP " + code
             return connection.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /**
+     * POST a body as JSON (for the fresh-install leg: publish the exact
+     * notify body the homeserver would POST to a pusher's endpoint URL —
+     * ntfy publishes the whole body to the topic).
+     */
+    fun httpPost(url: String, body: String, timeoutMillis: Int = DEFAULT_TIMEOUT_MILLIS): Int {
+        val connection = URL(url).openConnection() as HttpURLConnection
+        try {
+            connection.connectTimeout = timeoutMillis
+            connection.readTimeout = timeoutMillis
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.outputStream.use { it.write(body.toByteArray()) }
+            val code = connection.responseCode
+            if (code !in 200..299) {
+                val error = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+                throw AssertionError("POST $url -> HTTP $code: ${error.take(300)}")
+            }
+            return code
         } finally {
             connection.disconnect()
         }

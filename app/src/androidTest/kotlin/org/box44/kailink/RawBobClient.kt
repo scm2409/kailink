@@ -7,8 +7,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.matrix.rustcomponents.sdk.Client
 import org.matrix.rustcomponents.sdk.ClientBuilder
+import org.matrix.rustcomponents.sdk.CreateRoomParameters
 import org.matrix.rustcomponents.sdk.MessageType
 import org.matrix.rustcomponents.sdk.Room
+import org.matrix.rustcomponents.sdk.RoomPreset
+import org.matrix.rustcomponents.sdk.RoomVisibility
 import org.matrix.rustcomponents.sdk.SqliteStoreBuilder
 import org.matrix.rustcomponents.sdk.SyncSettingsV2
 import org.matrix.rustcomponents.sdk.TextMessageContent
@@ -61,6 +64,35 @@ class RawBobClient private constructor(
     }
 
     fun userId(): String = client.userId()
+
+    /** Access token of the signed-in session (raw clients, E2E assertions). */
+    suspend fun accessToken(): String = client.session().accessToken
+        ?: throw AssertionError("Signed-in session has no access token")
+
+    /** Room creation for the assertion side (same parameters as the SUT path). */
+    suspend fun createRoomForTest(name: String, inviteUserIds: List<String> = emptyList()): String =
+        client.createRoom(
+            CreateRoomParameters(
+                name = name,
+                isEncrypted = false,
+                visibility = RoomVisibility.Private,
+                preset = RoomPreset.PRIVATE_CHAT,
+                invite = inviteUserIds,
+            ),
+        )
+
+    /** Event id of the latest timeline event (after send + syncOnce). */
+    suspend fun latestEventId(roomId: String): String {
+        val room = client.getRoom(roomId)
+            ?: throw AssertionError("Room $roomId not found for latestEventId")
+        val timeline = room.timeline()
+        try {
+            return timeline.latestEventId()
+                ?: throw AssertionError("Room $roomId has no latest event id")
+        } finally {
+            runCatching { timeline.close() }
+        }
+    }
 
     fun close() {
         runCatching { client.close() }

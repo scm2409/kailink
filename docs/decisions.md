@@ -294,3 +294,47 @@ distributor code (`up/Distributor.sendMessage` sends the raw message
 bytes; `msg/NotificationDispatcher` → `decodeBytesMessage`) and the
 ntfy server behavior above. FCM/Google remains absent (project
 constitution); the existing E2E script was preserved unchanged.
+
+## 0.2.8: UnifiedPushRegistrar `Found` branch saves the distributor before registering
+
+- **Decision:** `UnifiedPushRegistrar.tryRegister` calls
+  `UnifiedPush.saveDistributor(context, packageName)` in the
+  `ResolvedDistributor.Found` branch **before**
+  `UnifiedPush.register(context)`. All registration branches now follow
+  the same invariant: save, then register.
+- **Why:** in the pinned connector (`org.unifiedpush.android:connector:3.3.5`),
+  `register` broadcasts the REGISTER action only for a distributor
+  **already saved in the connector's store** (`getDistributor(context,
+  store, ack=false)`; KDoc: "saveDistributor must be called before this
+  function"). `resolveDefaultDistributor` returning `Found` is a
+  resolution (deeplink `unifiedpush://link` or single-distributor
+  fallback), not persistence. On a fresh install the connector DB is
+  empty, so the old code's `register()` returned silently — no REGISTER
+  broadcast, no endpoint, state stuck at READY ("Push: registering …").
+  Red-gate evidence (2026-09-10, leg 7 against unfixed 0.2.7-phase1
+  code): the two diagnostic register lines 53 ms apart, then the 90 s
+  endpoint/pusher poll failure; no `up*?up=1` pusher ever appeared.
+  The fix matches the reference connector flow
+  (`tryUseDefaultDistributor`: `saveDistributor(context, it)` →
+  register). Proven green by the same gate leg after the fix (real UI
+  sign-in → real `up*` pusher on Conduit → rendered notification).
+- **Not decided (owner decision, unchanged):** the registered pusher
+  gateway URL stays `https://ntfy.sh/_matrix/push/v1/notify`
+  (`PushConfiguration.DEFAULT_GATEWAY_URL`). Conduit→gateway delivery
+  for the app's own pusher therefore remains unproven in the local
+  environment; the gate leg proves the app-side chain up to the
+  outermost observable effect (rendered notification) by publishing the
+  gateway-identical bytes to the real `up*` topic.
+- **Version:** `0.2.8` (versionCode 6). The first DebugLog line stays
+  the BuildConfig self-identification — now emitted as
+  `KaiLink 0.2.8 (versionCode 6)`; format and "very first line" rule
+  unchanged (`data/log/AppIdentity`).
+- **Gate:** `scripts/emulator-e2e.sh` gained leg 7
+  (`FreshInstallPushE2eTest#freshInstallUiSignInRegistersEndpointPusherAndRendersNotification`):
+  `pm clear org.box44.kailink` ONLY (the ntfy distributor app and its
+  state are never touched), distributor-presence precondition check,
+  re-grant of `POST_NOTIFICATIONS` after `pm clear`, emulator virtual-AP
+  provisioning for the ntfy subscriber service (2026-09-10 checklist
+  finding), and worst-leg exit semantics (`run_leg`/`GATE_STATUS` —
+  `am instrument` exits 0 even on test failures, so the gate must
+  aggregate). Existing leg 6 assertions unchanged.

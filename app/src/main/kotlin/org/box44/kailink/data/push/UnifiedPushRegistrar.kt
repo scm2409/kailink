@@ -11,6 +11,11 @@ import org.unifiedpush.android.connector.data.ResolvedDistributor
  * (e.g. ntfy). The state machine [PushController] stays identical and
  * JVM-testable; only the triggering is real now.
  *
+ * Connector invariant (all branches): `UnifiedPush.saveDistributor` runs
+ * BEFORE `UnifiedPush.register` — the connector broadcasts the REGISTER
+ * action only to a saved distributor. `ResolvedDistributor.Found` is a
+ * resolution result, not connector-store persistence.
+ *
  * Documented PoC limitation: if several distributors are installed but none
  * chosen yet, the registrar deterministically picks the first reported
  * distributor (a user-friendly selection runs via the connector's
@@ -29,7 +34,18 @@ class UnifiedPushRegistrar(
 
     override fun tryRegister() {
         when (val resolved = UnifiedPush.resolveDefaultDistributor(context)) {
-            is ResolvedDistributor.Found -> register(resolved.packageName)
+            is ResolvedDistributor.Found -> {
+                // The connector's `register` broadcasts only to a SAVED
+                // distributor (`getDistributor(context, store, ack=false)`
+                // reads the connector store; KDoc: "saveDistributor must be
+                // called before this function"). `Found` is a resolution,
+                // not persistence — without saveDistributor the fresh-install
+                // REGISTER broadcast never fires (red E2E evidence 2026-09-10,
+                // leg 7: "calling UnifiedPush.register" → "register returned"
+                // within 53 ms, no distributor reply, no up=1 pusher).
+                UnifiedPush.saveDistributor(context, resolved.packageName)
+                register(resolved.packageName)
+            }
             is ResolvedDistributor.ToSelect -> {
                 val distributor = UnifiedPush.getDistributors(context).firstOrNull()
                 if (distributor == null) {

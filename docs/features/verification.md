@@ -492,3 +492,78 @@ for the app's own registration would leave for public ntfy.sh); the
 `saveDistributor` registrar fix is left for the project owner. No
 source code, build configuration, tests, or dependencies were modified
 for these findings; no credentials, tokens, or personal data recorded.
+
+## 12. 0.2.8 — fresh-install push E2E (gate leg 7): red first, then the `saveDistributor` fix turns it green (2026-09-10)
+
+TDD order kept: the new E2E leg was written and run against the **unfixed**
+0.2.7-phase1 code first, recorded the exact red failure at the
+endpoint/pusher hop, and only then was the one-line registrar fix applied.
+
+**Red gate run (current code at the time, before any production change):**
+`./scripts/emulator-e2e.sh`, leg 6 green (`OK (2 tests)`), leg 7 red:
+
+```
+java.lang.AssertionError: fresh-install: no up=1 endpoint registered as Matrix pusher on Conduit after real UI sign-in (endpoint/pusher hop) — the REGISTER broadcast to the distributor never fired
+	at org.box44.kailink.FreshInstallPushE2eTest.pollUntil(FreshInstallPushE2eTest.kt:219)
+```
+`Time: 93.66`, `Tests run: 1, Failures: 1`. The real UI sign-in had
+completed (`fresh-install: UI sign-in finished (rooms screen visible, push
+state: Push: registering …)`); the /pushers poll showed only leg 6's
+synthetic `kailink-e2e-…` pusher, never an `up*?up=1` pusher. Logcat
+evidence of the silent no-op (red):
+
+```
+D KaiLink : UnifiedPush registration: calling UnifiedPush.register (distributor: io.heckel.ntfy)
+D KaiLink : UnifiedPush registration: UnifiedPush.register returned (distributor: io.heckel.ntfy)   (+53 ms, no distributor reply)
+```
+
+**Fix (production, one branch):** `UnifiedPushRegistrar.tryRegister`
+`Found` branch now calls `UnifiedPush.saveDistributor(context,
+resolved.packageName)` **before** `UnifiedPush.register(context)` —
+matching the reference connector flow (`tryUseDefaultDistributor`:
+`saveDistributor(context, it)` then register) and the connector KDoc
+("saveDistributor must be called before this function"). In connector
+3.3.5 `register` reads only the saved distributor from its store
+(`getDistributor(context, store, ack=false)`) and returns silently when
+none is saved; `Found` is a resolution, not persistence. The `ToSelect`
+branch already saved and is unchanged.
+
+**Version:** `0.2.8` (versionCode 6); first DebugLog line remains the
+BuildConfig self-identification, now `KaiLink 0.2.8 (versionCode 6)`.
+
+**Green gate run (full, after the fix):** `./scripts/emulator-e2e.sh` →
+**exit code 0** (script `GATE_STATUS`, worst-leg semantics):
+leg 6 `OK (2 tests)` (`Time: 274.796`), leg 7 `OK (1 test)`
+(`Time: 94.006`). Leg 7 chain observed in logcat (`KaiLinkE2E` /
+`KaiLink`):
+
+- real UI sign-in → rooms screen; `Push: registering …` during registration;
+- `UnifiedPush registration: calling UnifiedPush.register (distributor: io.heckel.ntfy)` → 20 ms later `register returned`, **then the distributor replies**: `UnifiedPush endpoint registered as Matrix pusher (gateway: https://ntfy.sh/_matrix/push/v1/notify)` + `Push endpoint registered as Matrix pusher`;
+- `fresh-install: endpoint registered as pusher: http://127.0.0.1:8090/upYCCyckyIljkU?up=1` (the app's real up* endpoint as pushkey on Conduit, app_id `org.box44.kailink`);
+- `fresh-install: Bob has sent: fresh-install-1789061625929 (event $M1DXb0-RiYi-XDaQQouvIvDDNlOQbrloJLD0vpQF5wk)` — real event id;
+- notify body published to the real topic: `fresh-install: notify body published to http://127.0.0.1:8090/upYCCyckyIljkU?up=1 (existing chain bytes)`;
+- **outermost observable effect:** `fresh-install ok: notification rendered` (41 ms after the publish; `dumpsys notification --noredact` contains the KaiLink notification with the sent body).
+
+**Installed version on the emulator:** `versionCode=6 versionName=0.2.8`;
+identity line in logcat: `I KaiLink : KaiLink 0.2.8 (versionCode 6)`.
+
+**JVM checks:** `./gradlew testDebugUnitTest assembleDebug
+assembleEmulatorDebug --offline` → `BUILD SUCCESSFUL` (28 executed/91
+up-to-date in the fix run); `Checks: 96, passed: 96, failed: 0`.
+
+**What leg 7 proves / what it cannot prove (honesty):** proven — the
+on-device distributor registration on a genuinely fresh KaiLink install
+(`pm clear org.box44.kailink` only; ntfy distributor state untouched),
+the real `up*` endpoint as a Conduit pusher for the app's own pusher,
+and the full delivery→rendering path through the real ntfy distributor
+into `KaiLinkPushReceiver` → `PushMessageHandler` → `PushNotifier` with
+gateway-identical bytes. Not proven: the **Conduit→gateway hop for the
+app's own pusher** — the registered `data.url` remains
+`https://ntfy.sh/_matrix/push/v1/notify` (`PushConfiguration.DEFAULT_GATEWAY_URL`),
+so a Conduit-initiated push for the app's own registration would leave
+for public ntfy.sh where nobody listens for the local topic. The gate
+proves that hop only for its synthetic leg-6 pusher; the delivery leg of
+leg 7 publishes the exact notify body to the real topic (the same bytes
+Conduit posts, gate step C2b). Changing the default gateway URL is a
+project-owner decision and was **not** made here. A physical-device run
+remains the check for real GMS-less hardware behavior.

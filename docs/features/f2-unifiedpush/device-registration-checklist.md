@@ -42,7 +42,7 @@ resolved against the distributors installed on the device:
 
 | Result | KaiLink behavior |
 | --- | --- |
-| `ResolvedDistributor.Found` | `register()` (Step 3) |
+| `ResolvedDistributor.Found` | `UnifiedPush.saveDistributor(context, resolved.packageName)` **first** (a resolution is not connector-store persistence; `register` broadcasts only to a saved distributor), then `register()` (Step 3). |
 | `ResolvedDistributor.ToSelect` | Deterministically picks the **first** distributor reported by `UnifiedPush.getDistributors(context)`, saves it (`UnifiedPush.saveDistributor`), then `register()`. Documented PoC limitation: no user-facing distributor picker (KDoc of `UnifiedPushRegistrar`). |
 | `ResolvedDistributor.NoneAvailable` | `controller.onNoDistributor()` → `PushState.NOT_AVAILABLE`; room list shows "Push: no distributor found". |
 
@@ -254,12 +254,22 @@ no log line emitted — gap
 The E2E gate (`scripts/emulator-e2e.sh`) proves the server side of the
 chain (pusher registration against Conduit, Conduit→ntfy publish, and
 `PushPayload.parse` of the real message bytes — steps C2/C2b/C2c) plus
-build/sign-in smoke. It **cannot** prove the on-device distributor
-registration (no distributor is installed on the emulator): distributor
-selection, the `REGISTER` broadcast, the ntfy subscription display, and
-the rendered notification remain device-manual checks
-(`docs/manualtest-protokoll.md`, MT-5/MT-6/MT-8). This checklist exists
-so those manual steps are checkable line by line.
+build/sign-in smoke, **and since 0.2.8 also leg 7** (`FreshInstallPushE2eTest`,
+see the section below): the on-device distributor registration on a
+genuinely fresh KaiLink install (`pm clear org.box44.kailink` only — the
+ntfy distributor app and its state are never touched), the app's real
+`up*` endpoint registered as a Conduit pusher, and the rendered
+notification as the outermost observable effect of a real push through
+the distributor.
+
+What the gate still **cannot** prove: the Conduit→gateway hop for the
+app's **own** pusher (its registered `data.url` is
+`https://ntfy.sh/_matrix/push/v1/notify` by default, so a
+Conduit-initiated push would go to public ntfy.sh; leg 7's delivery leg
+publishes the identical gateway bytes directly to the real topic) and
+any behavior of physical GMS-less hardware (device-manual checks,
+`docs/manualtest-protokoll.md`, MT-5/MT-6/MT-8). This checklist exists
+so those manual steps remain checkable line by line.
 
 ## Superseded run finding (2026-09-10, morning) — corrected below
 
@@ -409,3 +419,34 @@ design of the current default.
 `register`) and any gateway decision are project-owner decisions; no
 source, build config, dependencies, or gate behavior was changed for
 these findings.
+
+## Resolution (0.2.8, 2026-09-10): the registrar gap is fixed and gate-proven
+
+The `Fix ownership` note above was acted on: the **registrar fix** is
+implemented (the **gateway decision is not** — see below).
+
+- `UnifiedPushRegistrar.tryRegister` (`Found` branch) now calls
+  `UnifiedPush.saveDistributor(context, resolved.packageName)` before
+  `register(resolved.packageName)`. The connector KDoc requires it
+  ("saveDistributor must be called before this function"); connector
+  3.3.5's `register` broadcasts only to a distributor **saved in its
+  store** (`getDistributor(context, store, ack=false)`) and returns
+  silently otherwise — exactly the case-(c) break classified in the
+  2026-09-10 runs above. The reference connector flow
+  (`tryUseDefaultDistributor`) does the same
+  (`saveDistributor(context, it)` → register). The `ToSelect` branch
+  already saved; its behavior is unchanged.
+- Proven by gate leg 7 (`FreshInstallPushE2eTest`, TDD red → green;
+  full evidence in `docs/features/verification.md` §12): after
+  `pm clear org.box44.kailink` (ntfy state untouched), a real UI
+  sign-in ends with the app's real `up*` endpoint as a Conduit pusher
+  (`http://127.0.0.1:8090/upYCCyckyIljkU?up=1`, app_id
+  `org.box44.kailink`) and the rendered KaiLink notification for a real
+  event id published through the real distributor.
+- The **gateway configuration gap stays open by owner decision**:
+  `PushConfiguration.DEFAULT_GATEWAY_URL` remains
+  `https://ntfy.sh/_matrix/push/v1/notify`, so leg 7 cannot prove
+  Conduit→gateway for the app's own pusher in this environment (it
+  publishes the identical gateway bytes to the real topic instead).
+- Version bumped to `0.2.8` (versionCode 6); the first DebugLog line
+  remains the BuildConfig identity (`KaiLink 0.2.8 (versionCode 6)`).

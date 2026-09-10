@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Two-account Matrix E2E on the emulator (Chunk A + B) + real TLS path test.
+# Two-account Matrix E2E on the emulator (Chunk A + B) + real TLS path test
+# + fresh-install push E2E (leg 7: pm clear of org.box44.kailink ONLY, the
+# ntfy distributor app and its state are never touched).
 # ONE command = reproducible run: Conduit+ntfy+nginx-TLS, adb reverse,
 # accounts, both APKs, am instrument with the two-account test and the
 # TLS login test (rustls against https://127.0.0.1:8443, self-signed
 # certificate — expectation: TLS/certificate error, NOT the
-# initialization panic).
+# initialization panic), then the fresh-install push test.
 # Prerequisite: emulator kailink-atd35 is running (emulator-5554).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -26,13 +28,13 @@ BOB_PASS="${E2E_BOB_PASS:-phase1-e2e-bob}"
 [[ -x "$ADB" ]] || { echo "ADB missing: $ADB" >&2; exit 2; }
 "$ADB" -s "$DEVICE" get-state >/dev/null || { echo "Emulator not reachable: $DEVICE" >&2; exit 2; }
 
-echo "[1/6] Container images (digest into the log)"
+echo "[1/7] Container images (digest into the log)"
 podman pull "$CONDUIT_IMAGE" >/dev/null
 podman pull "$NTFY_IMAGE" >/dev/null
 podman pull "$NGINX_IMAGE" >/dev/null
 podman images --digests 2>/dev/null | grep -E "conduit|ntfy|nginx" || podman images 2>/dev/null | grep -E "conduit|ntfy|nginx" || true
 
-echo "[2/6] Starting Conduit + ntfy + nginx TLS proxy (shared network: $NETWORK)"
+echo "[2/7] Starting Conduit + ntfy + nginx TLS proxy (shared network: $NETWORK)"
 podman network create "$NETWORK" >/dev/null 2>&1 || true
 podman rm -f kailink-e2e-conduit kailink-e2e-ntfy kailink-e2e-tls >/dev/null 2>&1 || true
 CONFIG_FILE="$(mktemp)"
@@ -76,25 +78,31 @@ done
 if [[ "$TLS_READY" != true ]]; then echo "nginx TLS proxy did not become ready." >&2; podman logs kailink-e2e-tls >&2; exit 1; fi
 echo "Conduit + ntfy + TLS proxy ready (ports $CONDUIT_PORT/$NTFY_PORT/$TLS_PORT)."
 
-echo "[3/6] adb reverse (emulator network broken; tunnel instead of 10.0.2.2)"
+echo "[3/7] adb reverse (emulator network broken; tunnel instead of 10.0.2.2)"
 "$ADB" -s "$DEVICE" reverse "tcp:6167" "tcp:$CONDUIT_PORT"
 "$ADB" -s "$DEVICE" reverse "tcp:8090" "tcp:$NTFY_PORT"
 "$ADB" -s "$DEVICE" reverse "tcp:8443" "tcp:$TLS_PORT"
 "$ADB" -s "$DEVICE" reverse --list
 
-echo "[4/6] Registering throwaway accounts (already existing is ok)"
+echo "[4/7] Registering throwaway accounts (already existing is ok)"
 register_user() { curl -fsS -X POST "http://127.0.0.1:$CONDUIT_PORT/_matrix/client/v3/register" -H 'content-type: application/json' -d "{\"username\":\"$1\",\"password\":\"$2\",\"auth\":{\"type\":\"m.login.dummy\"}}" >/dev/null 2>&1 || true; }
 register_user "$ALICE_USER" "$ALICE_PASS"
 register_user "$BOB_USER" "$BOB_PASS"
 echo "Accounts ready: $ALICE_USER, $BOB_USER."
 
-echo "[5/6] Building + installing APKs"
+echo "[5/7] Building + installing APKs"
 ./gradlew :app:assembleEmulatorDebug :app:assembleDebugAndroidTest --offline
 "$ADB" -s "$DEVICE" install -r app/build/outputs/apk/emulatorDebug/app-emulatorDebug.apk
 "$ADB" -s "$DEVICE" install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 
-echo "[6/6] Two-account E2E (Chunk A + Chunk B + restore leg) + TLS path test"
-"$ADB" -s "$DEVICE" shell am instrument -w -r \
+# adb shell propagates no non-zero exit for failed tests (am instrument
+# exits 0 even with failures), so every leg records its status and the
+# gate exits with the worst result — a red leg must fail the gate.
+GATE_STATUS=0
+run_leg() { "$@" || GATE_STATUS=1; }
+
+echo "[6/7] Two-account E2E (Chunk A + Chunk B + restore leg) + TLS path test"
+run_leg "$ADB" -s "$DEVICE" shell am instrument -w -r \
   -e debug false \
   -e class 'org.box44.kailink.MatrixE2eTest#twoAccountTimelineDeliveryUnencrypted,org.box44.kailink.TlsE2eTest#rustlsLoginOverHttpsFailsWithTlsErrorNotInitPanic' \
   -e e2e.homeserver http://127.0.0.1:6167 \
@@ -103,3 +111,28 @@ echo "[6/6] Two-account E2E (Chunk A + Chunk B + restore leg) + TLS path test"
   -e e2e.alice.username "$ALICE_USER" -e e2e.alice.password "$ALICE_PASS" \
   -e e2e.bob.username "$BOB_USER" -e e2e.bob.password "$BOB_PASS" \
   org.box44.kailink.test/androidx.test.runner.AndroidJUnitRunner
+
+echo "[7/7] Fresh-install push E2E (pm clear KaiLink ONLY; ntfy distributor state untouched)"
+# The UnifiedPush distributor app must already be installed (it is a device
+# precondition, docs/features/f2-unifiedpush/device-registration-checklist.md
+# Prerequisites). This leg never reinstalls, clears, or reconfigures it.
+"$ADB" -s "$DEVICE" shell pm list packages io.heckel.ntfy | grep -q "package:io.heckel.ntfy" \
+  || { echo "ntfy distributor app (io.heckel.ntfy) missing on $DEVICE" >&2; exit 1; }
+"$ADB" -s "$DEVICE" shell pm clear org.box44.kailink
+# pm clear revokes runtime permissions; the notification-rendering assertion
+# needs POST_NOTIFICATIONS again (declared in the app manifest).
+"$ADB" -s "$DEVICE" shell pm grant org.box44.kailink android.permission.POST_NOTIFICATIONS
+# The ntfy distributor's SubscriberService only connects with an active
+# default network (checklist 2026-09-10 finding): gate-infrastructure
+# provisioning of the emulator's virtual AP, no project change.
+"$ADB" -s "$DEVICE" shell cmd wifi connect-network AndroidWifi open >/dev/null 2>&1 || true
+run_leg "$ADB" -s "$DEVICE" shell am instrument -w -r \
+  -e debug false \
+  -e class 'org.box44.kailink.FreshInstallPushE2eTest#freshInstallUiSignInRegistersEndpointPusherAndRendersNotification' \
+  -e e2e.homeserver http://127.0.0.1:6167 \
+  -e e2e.pusher_gateway http://kailink-e2e-ntfy \
+  -e e2e.alice.username "$ALICE_USER" -e e2e.alice.password "$ALICE_PASS" \
+  -e e2e.bob.username "$BOB_USER" -e e2e.bob.password "$BOB_PASS" \
+  org.box44.kailink.test/androidx.test.runner.AndroidJUnitRunner
+
+exit "$GATE_STATUS"
