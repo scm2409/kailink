@@ -14,6 +14,7 @@
     <string name="rooms_empty">No rooms found.</string>
     <string name="rooms_logged_in_as">Signed in: %1$s</string>
     <string name="rooms_logged_in">Signed in</string>
+    <string name="rooms_about">KaiLink %1$s</string>
     <string name="push_registered">Push: registered (UnifiedPush)</string>
     <string name="push_ready">Push: registering …</string>
     <string name="push_not_available">Push: no distributor found</string>

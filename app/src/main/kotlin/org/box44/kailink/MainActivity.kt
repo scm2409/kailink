@@ -80,6 +80,9 @@ class MainActivity : Activity() {
     private lateinit var textVersionRooms: TextView
     private lateinit var textVersionTimeline: TextView
 
+    // About row of the signed-in rooms screen (0.2.7-phase1).
+    private lateinit var textAboutRooms: TextView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -122,6 +125,8 @@ class MainActivity : Activity() {
         textVersionLogin.text = BuildConfig.VERSION_NAME
         textVersionRooms.text = BuildConfig.VERSION_NAME
         textVersionTimeline.text = BuildConfig.VERSION_NAME
+        textAboutRooms = findViewById(R.id.text_about_rooms)
+        textAboutRooms.text = getString(R.string.rooms_about, BuildConfig.VERSION_NAME)
 
         loginViewModel = LoginViewModel(graph.channelClient, graph.sessionStore, graph.pushTrigger)
         uiScope.launch { loginViewModel.ui.collect(::renderLogin) }

@@ -17,3 +17,9 @@ Open (Phase 2):
       `PushMessageHandler` with cold-start session restore;
       `MatrixSdkChannelClient.fetchNotification` via the SDK
       `NotificationClient`; receiver `exported=true`; JVM checks 94/94.)*
+- [x] Device registration checklist (documentation, 2026-09-10):
+      `docs/features/f2-unifiedpush/device-registration-checklist.md` —
+      on-device registration flow, exact broadcast actions (connector
+      3.3.5 + spec AND_3.1.0 cross-check), ntfy subscription display,
+      and the failure modes with the verbatim log strings (gaps marked
+      explicitly, no code added for them).

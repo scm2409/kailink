@@ -3,6 +3,7 @@ package org.box44.kailink
 import android.app.Application
 import android.util.Log
 import java.io.File
+import org.box44.kailink.data.log.AppIdentity
 import org.box44.kailink.data.log.DebugLog
 import org.box44.kailink.data.log.SdkLogTailer
 import org.box44.kailink.data.push.PushNotifier
@@ -19,6 +20,13 @@ class KaiLinkApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Version self-identification (0.2.7-phase1): the very first DebugLog
+        // line after app start identifies the app from BuildConfig, e.g.
+        // "KaiLink 0.2.7-phase1 (versionCode 5)" — every "Send log" dump
+        // therefore starts with the version.
+        val startupLine = AppIdentity.startupLine(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+        DebugLog.append(startupLine)
+        Log.i(TAG, startupLine)
         // Must run before the first client construction (AppGraph builds the
         // MatrixSdkChannelClient): initializes the Tokio runtime and the
         // rustls-platform-verifier JNI bridge (Element X: false, multithreaded).

@@ -94,6 +94,32 @@
   distinct IDs (`text_version_login` / `text_version_rooms` /
   `text_version_timeline`).
 
+## 0.2.7-phase1: version self-identification
+
+- The very first `DebugLog` line after app start is the app
+  self-identification from BuildConfig:
+  `KaiLink <versionName> (versionCode <versionCode>)` —
+  `KaiLinkApp.onCreate` appends it (and mirrors it to logcat) before
+  anything else runs, so every "Send log" dump starts with the version.
+  The format lives in the pure `data/log/AppIdentity` (JVM-checked:
+  format + first-line-in-buffer containment, 96/96 checks).
+- The signed-in rooms screen keeps the footer and adds a minimal
+  one-line About row (`text_about_rooms`, `KaiLink <VERSION_NAME>`)
+  directly above the footer.
+- Version: `0.2.7-phase1` (versionCode 5).
+- The on-device UnifiedPush registration flow is documented in
+  `docs/features/f2-unifiedpush/device-registration-checklist.md`
+  (cross-checked against the pinned connector 3.3.5 AAR constants, the
+  UnifiedPush spec AND_3.1.0, and the ntfy distributor). Two honest
+  findings from that cross-check, deliberately not fixed in code:
+  the spec action `org.unifiedpush.android.connector.TEMP_UNAVAILABLE`
+  is **not** declared in KaiLink's receiver intent-filter (a
+  temporary-unavailable event is silently ignored), and an action named
+  `POST_ENDPOINTS` does not exist anywhere in the connector/spec/ntfy —
+  the endpoint-delivery action is `NEW_ENDPOINT`; if it is never
+  delivered, the push state stays READY ("Push: registering …") and
+  **no log line is emitted** (all documented as gaps).
+
 ## 0.2.5-phase1: native sliding sync discovery (live-sync fix)
 
 Root cause (0.2.4-phase1 behavior): the FFI `ClientBuilder` of the pinned

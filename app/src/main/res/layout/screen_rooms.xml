@@ -88,6 +88,17 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
+    <!-- About row (0.2.7-phase1): minimal one-line app identification;
+         the version footer below stays unchanged. -->
+    <TextView
+        android:id="@+id/text_about_rooms"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingBottom="2dp"
+        android:textColor="@color/secondary_text"
+        android:textSize="11sp" />
+
     <!-- Version footer: genuinely bottom-positioned below the list. -->
     <TextView
         android:id="@+id/text_version_rooms"

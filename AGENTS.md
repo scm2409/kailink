@@ -30,8 +30,9 @@
 - Built-in websearch is available when `OPENCODE_ENABLE_EXA=1`.
 - Project-specific operational knowledge belongs in this file; skills are only for project-wide recipes.
 
-## Project conventions (0.2.6-phase1)
+## Project conventions (0.2.7-phase1)
 - App logging: route all app log output through `DebugLog` (`data/log/`), normally via the `AppGraph.log` seam. Never append credentials or tokens to the log buffer (G7).
+- Version self-identification (new in 0.2.7-phase1): `KaiLinkApp.onCreate` appends the very first DebugLog line — the `AppIdentity.startupLine(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)` format, e.g. `KaiLink 0.2.7-phase1 (versionCode 5)` — before anything else runs; do not append anything before it. The signed-in rooms screen additionally shows a one-line About row (`text_about_rooms`, `KaiLink <VERSION_NAME>`) above the footer. On-device UnifiedPush registration (exact actions, log strings, failure-mode gaps) is documented in `docs/features/f2-unifiedpush/device-registration-checklist.md`.
 - SDK diagnostics (new in 0.2.5-phase1): the Rust SDK/HTTP client tracing goes to logcat AND rotating files under `cacheDir/matrix/tracing` (path constant `SdkLogTailer.TRACE_DIRECTORY`, prefix/suffix `SdkLogTailer.DEFAULT_PREFIX`/`DEFAULT_SUFFIX`; configured in `KaiLinkApp` via `initPlatform(TracingFileConfiguration)`). `SdkLogTailer` (started in `AppGraph`) tails appended lines into `SdkLogBridge`, which level/target-filters (ERROR/WARN always, sync-relevant INFO, never DEBUG/TRACE) before they reach the bounded `DebugLog` ring buffer. Keep both the file config and the tailer bounded; never loop tailer failures back into the log.
 - Sliding sync (new in 0.2.5-phase1): client builds use the SDK-sanctioned discovery `SlidingSyncVersionBuilder.DISCOVER_NATIVE` (`ClientBuilder.build()` → `GET /versions` → `unstable_features["org.matrix.simplified_msc3575"]` → NATIVE; see docs/decisions.md for exact SDK source paths). Only when the discovery build fails is the client rebuilt once with the SDK default `NONE` (Conduit-class servers, discovery transport errors) — never pre-emptively. Live sync must not be disabled or silently swallowed: failures are surfaced (room list error/log), while sign-in, restore, `syncOnceV2`, send log and uploads keep working. The detected mode is part of `Session` (`SlidingSyncMode`) and persists in both session stores; legacy sessions (pre-0.2.5) restore as NONE.
 - Version footer: every screen layout includes a version footer TextView (`text_version_<screen>`); screen IDs must stay distinct because all screens are inflated simultaneously in `activity_main`. Set the text from `BuildConfig.VERSION_NAME` (the `buildConfig` build feature is enabled for this).
@@ -47,3 +48,10 @@
 - Never edit `local.properties`.
 - Never commit build outputs or `oc-proof*` throwaway files.
 - Report observed exit codes and output; never claim results from commands that were not run.
+
+## Test discipline (added 10.09.2026, Martin)
+- TDD in the practical sense: the e2e test is the FIRST artifact of a feature, not the last. Before OpenCode implements a feature, the test that will prove it exists in red or scaffolded form; implementation then makes it green. Unit checks support e2e tests; they never replace them.
+- e2e tests are the primary tests. A feature counts as implemented only when its e2e proof runs in the project gate (scripts/emulator-e2e.sh or a documented successor).
+- The gate must cover the chain the user actually uses. When a feature's value crosses an app/process boundary (server, broker, distributor app), the e2e test crosses the same boundary and asserts at the outermost observable effect (e.g. a rendered notification), never only at an internal seam. If the current gate cannot prove that chain, extending the gate is the first step of the feature order.
+- Gate changes for coverage are test infrastructure, not project-code edits; keep existing assertions intact (no weakening).
+- Every report on a delivery-bound feature states honestly: what the gate proves, what it cannot prove with current infrastructure, and what remains for a device test.

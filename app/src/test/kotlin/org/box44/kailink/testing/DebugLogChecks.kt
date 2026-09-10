@@ -1,9 +1,34 @@
 package org.box44.kailink.testing
 
+import org.box44.kailink.BuildConfig
+import org.box44.kailink.data.log.AppIdentity
 import org.box44.kailink.data.log.DebugLog
 import java.util.concurrent.CountDownLatch
 
 fun debugLogChecks() {
+
+    Checks.check("startup identity line is built from versionName and versionCode") {
+        val line = AppIdentity.startupLine(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+        expectTrue(
+            Regex("""KaiLink \S+ \(versionCode \d+\)""").matches(line),
+            "line matches the self-identification format",
+        )
+        expectTrue(line.contains(BuildConfig.VERSION_NAME), "versionName contained")
+        expectTrue(line.contains("versionCode ${BuildConfig.VERSION_CODE}"), "versionCode contained")
+    }
+
+    Checks.check("first DebugLog line after app start contains the version string") {
+        DebugLog.clear()
+        // Simulates the app-start order: the identity line is appended before
+        // anything else (KaiLinkApp.onCreate does this with BuildConfig).
+        DebugLog.append(AppIdentity.startupLine(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
+        DebugLog.append("later line")
+        val firstLine = DebugLog.dump().lineSequence().first()
+        expectTrue(
+            firstLine.contains("KaiLink ${BuildConfig.VERSION_NAME} (versionCode ${BuildConfig.VERSION_CODE})"),
+            "first DebugLog line contains the version string",
+        )
+    }
 
     Checks.check("ring buffer retains appended lines in order") {
         DebugLog.clear()

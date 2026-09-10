@@ -357,3 +357,73 @@ distributor actually deliver UnifiedPush broadcasts to the app.
 **Not observed:** a real notification render on screen (needs the ntfy
 distributor app installed on the emulator/device — V4, manual protocol
 MT-6).
+
+## 9. 0.2.7-phase1 — version self-identification, registration checklist (2026-09-10)
+
+**V1 (JVM):** `./gradlew testDebugUnitTest assembleDebug --offline` →
+`BUILD SUCCESSFUL`; JUnit `AllChecksTest` runs all 96 checks (was 94;
++2 new in `debugLogChecks`), report
+`app/build/reports/phase1-checks.txt`: `Checks: 96, passed: 96,
+failed: 0`. New checks: the `AppIdentity.startupLine` format
+(`KaiLink <versionName> (versionCode <versionCode>)`) and that the
+**first DebugLog line after app start contains the version string**.
+
+**V2/V3 (build + structure):** `./gradlew assembleDebug --offline` →
+`BUILD SUCCESSFUL`; `aapt2 dump badging`:
+`package: name='org.box44.kailink' versionCode='5'
+versionName='0.2.7-phase1'`.
+
+**E2E gate:** `scripts/emulator-e2e.sh` (emulator-5554 kailink-atd35
+booted, Conduit + ntfy + nginx-TLS containers, `adb reverse`) — observed
+twice on 2026-09-10, both **exit code 0, `OK (2 tests)`**
+(`MatrixE2eTest#twoAccountTimelineDeliveryUnencrypted`,
+`TlsE2eTest#rustlsLoginOverHttpsFailsWithTlsErrorNotInitPanic`,
+`Time: 274.813` on the first run); the gate built both APKs offline
+against the new version.
+
+**Emulator runtime smoke (2026-09-10, kailink-atd35):** fresh start of
+the installed app (`am force-stop` + `am start`, `logcat -c` before)
+— the very first `KaiLink` line is the self-identification:
+
+```
+09-10 08:39:03.400  2439  2439 I KaiLink : KaiLink 0.2.7-phase1 (versionCode 5)
+```
+
+**Not observed:** the ntfy-side registration display (V4, manual — see
+`docs/features/f2-unifiedpush/device-registration-checklist.md`).
+
+## 10. 0.2.7-phase1 Task 3 — on-device distributor chain (2026-09-10): **STOPPED / NOT PASSED**
+
+**Status: STOPPED before the trigger/notification assertion.** The required
+distributor registration step failed; no rendered-notification assertion was
+made. The incomplete test scaffolding for this task
+(`app/src/androidTest/kotlin/org/box44/kailink/OnDevicePushE2eTest.kt`,
+`app/src/androidTest/kotlin/org/box44/kailink/NotificationCaptureService.kt`,
+plus the test-manifest listener entry) was removed on 2026-09-10 — it was
+unfinished (literal `...` placeholders in the delivery leg) and must not
+remain. The Task 1/2 changes (version self-identification, registration
+checklist) are unaffected.
+
+**Setup on 2026-09-10:** the ntfy Android 1.25.2 APK (binwiederhier/ntfy-android)
+was provisioned temporarily outside the repo. Observed:
+
+- ntfy Android 1.25.2 install succeeded on the emulator (kailink-atd35).
+- `POST_NOTIFICATIONS` was granted to KaiLink.
+- Real KaiLink UI sign-in succeeded (login screen → rooms screen).
+- **Precise observed failure:** the required distributor registration step
+  then failed — no new `up*` UnifiedPush endpoint appeared in Conduit
+  `GET /pushers`. The only observed pusher was a stale synthetic
+  `kailink-e2e-*` endpoint left by the existing server-side C2 test —
+  i.e. the REGISTER → ntfy distributor → NEW_ENDPOINT → pusher chain did
+  not produce a run-specific `up*` pushkey.
+
+**Consequence:** Task 3 stopped at this step, before the Bob-send →
+distributor → notification trigger leg. No notification capture or rendered-shade
+assertion was made. The prior gate sections (8 and 9 above) prove the
+server-side and app-side payload parsing chain only; what remains unproven
+is the real distributor round-trip on device (V4 — see
+`docs/features/f2-unifiedpush/device-registration-checklist.md`).
+**Not observed with current infrastructure:** any on-device proof that the
+ntfy distributor app registers a KaiLink subscription and renders a
+notification. No credentials, tokens, or personal data were recorded in
+this report.

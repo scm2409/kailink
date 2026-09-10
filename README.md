@@ -43,18 +43,25 @@ Gradle wrapper 9.1.0, AGP 8.13.2, Kotlin 2.2.21.
 ./gradlew check                             # including lint (abortOnError=false)
 ```
 
-Observed on 2026-09-09: `BUILD SUCCESSFUL`; JUnit report `tests="1"
-failures="0"` (the test runs all 94 check-group checks), check report
-under `app/build/reports/phase1-checks.txt` (94/94 passed), see
+Observed on 2026-09-10: `BUILD SUCCESSFUL`; JUnit report `tests="1"
+failures="0"` (the test runs all 96 check-group checks), check report
+under `app/build/reports/phase1-checks.txt` (96/96 passed), see
 [`docs/features/verification.md`](docs/features/verification.md).
 Result: `app/build/outputs/apk/debug/app-debug.apk`
-(`org.box44.kailink`, versionName `0.2.6-phase1`, minSdk 28, targetSdk 36,
+(`org.box44.kailink`, versionName `0.2.7-phase1`, minSdk 28, targetSdk 36,
 including `libmatrix_sdk_ffi.so` from the matrix-rust-sdk).
 
 Since 0.2.4-phase1 every screen shows the version as a small footer, and the
 room list offers a compact **Send log** action (signed-in only) that uploads
 the in-app debug log (ring buffer, ~1000 lines) as a `.txt` file into the
-KaiL room via the SDK attachment path (`Timeline.sendFile`).
+KaiL room via the SDK attachment path (`Timeline.sendFile`). Since
+0.2.7-phase1 the very first debug-log line after app start identifies the
+app from BuildConfig (`KaiLink 0.2.7-phase1 (versionCode 5)`), and the
+signed-in rooms screen shows a one-line About row (`KaiLink 0.2.7-phase1`)
+in addition to the footer. The on-device UnifiedPush registration flow
+(with the exact broadcast actions, log lines, and failure modes) is
+documented in
+[`docs/features/f2-unifiedpush/device-registration-checklist.md`](docs/features/f2-unifiedpush/device-registration-checklist.md).
 
 ## Project structure
 
