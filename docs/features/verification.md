@@ -392,9 +392,9 @@ the installed app (`am force-stop` + `am start`, `logcat -c` before)
 **Not observed:** the ntfy-side registration display (V4, manual — see
 `docs/features/f2-unifiedpush/device-registration-checklist.md`).
 
-## 10. 0.2.7-phase1 Task 3 — on-device distributor chain (2026-09-10): **STOPPED / NOT PASSED**
+## 10. 0.2.7-phase1 Task 3 — on-device distributor chain (2026-09-10): first run **STOPPED / NOT PASSED**, investigation run (afternoon) classified the break and proved the chain
 
-**Status: STOPPED before the trigger/notification assertion.** The required
+**First run — status: STOPPED before the trigger/notification assertion.** The required
 distributor registration step failed; no rendered-notification assertion was
 made. The incomplete test scaffolding for this task
 (`app/src/androidTest/kotlin/org/box44/kailink/OnDevicePushE2eTest.kt`,
@@ -427,3 +427,68 @@ is the real distributor round-trip on device (V4 — see
 ntfy distributor app registers a KaiLink subscription and renders a
 notification. No credentials, tokens, or personal data were recorded in
 this report.
+
+## 11. 0.2.7-phase1 Task 3 — investigation run (2026-09-10, afternoon): classification (c), distributor chain proven on device, gate passed
+
+Coordinator correction applied and verified: the pinned
+`org.matrix.rustcomponents:sdk-android:26.09.08` AAR **does** contain
+`jni/x86_64/libmatrix_sdk_ffi.so` (69,989,968 bytes); the morning finding
+"zero entries under `lib/`" was an inspection of the **wrong archive
+path** (`lib/` instead of `jni/`), and the earlier no-matching-ABIs
+installation failure came from installing the arm64-only `debug` APK by
+mistake. Build config and ABI configuration unchanged.
+
+**Setup:** x86_64 AVD kailink-atd35 (API 35, emulator-5554), only the
+rebuilt `app-emulatorDebug.apk` (versionCode 5, contains
+`lib/x86_64/libmatrix_sdk_ffi.so`), ntfy Android 1.25.2
+(`io.heckel.ntfy`) with `POST_NOTIFICATIONS` granted to both apps, gate
+containers running, `adb reverse` 6167/8090/8443. Real KaiLink UI
+sign-in against `http://127.0.0.1:6167`.
+
+**Observed (details and log lines in
+`docs/features/f2-unifiedpush/device-registration-checklist.md` and
+`docs/features/f2-unifiedpush/verification.md`):**
+
+- **Classification: case (c)** — both diagnostic register lines appear
+  (restore and sign-in paths), but no `up*` endpoint and no `up*`
+  pusher. Root cause: connector 3.3.5 sends REGISTER only for
+  distributors already stored in its connector DB, and
+  `UnifiedPushRegistrar` never calls `UnifiedPush.saveDistributor` in
+  the `Found` branch (`UnifiedPushRegistrar.kt:32`) — the broadcast is
+  never sent, `register()` returns silently, the state stays at
+  "Push: registering …".
+- **Distributor server: the Podman ntfy (http://127.0.0.1:8090), NOT
+  ntfy.sh** (read-only inspection of the ntfy app's saved
+  `DefaultBaseURL`; a shell REGISTER probe proved the distributor
+  works end to end).
+- **Chain proven after a diagnostic device-state injection** (inserting
+  the `distributors` row exactly as `saveDistributor` would — no code
+  change): REGISTER (shared identity) → `up*` subscription on the
+  Podman server → NEW_ENDPOINT → KaiLink pusher at Conduit
+  (`pushkey http://127.0.0.1:8090/up3QmdfC4EJh51?up=1`) → room list
+  **"Push: registered (UnifiedPush)"** → real Bob message delivered as
+  the gateway notify body → **rendered KaiLink notification** (channel
+  "Push messages", `kailink-push-task3`, `kailink_bob: Task 3 push
+  delivery probe`). Malformed-payload case handled per spec.
+- **Environment note:** the ntfy distributor needs an active default
+  network before it opens subscriber connections; the AVD booted with
+  none. Provisioning the emulator's virtual AP
+  (`cmd wifi connect-network AndroidWifi open` →
+  `Active default network: 100`) is part of the run recipe.
+
+**Full Task 3 gate (unchanged):** `./scripts/emulator-e2e.sh` →
+**exit code 0, `OK (2 tests)`, `Time: 274.752`**
+(`MatrixE2eTest#twoAccountTimelineDeliveryUnencrypted` with C2/C2b/C2c
+evidence in logcat `KaiLinkE2E`,
+`TlsE2eTest#rustlsLoginOverHttpsFailsWithTlsErrorNotInitPanic`).
+
+**JVM checks:** `./gradlew testDebugUnitTest assembleDebug --offline` →
+`BUILD SUCCESSFUL`; `Checks: 96, passed: 96, failed: 0`.
+
+**Not proven with current infrastructure:** Conduit→push delivery for
+the **app's own pusher** (its gateway URL defaults to
+`https://ntfy.sh/_matrix/push/v1/notify`, so a Conduit-initiated push
+for the app's own registration would leave for public ntfy.sh); the
+`saveDistributor` registrar fix is left for the project owner. No
+source code, build configuration, tests, or dependencies were modified
+for these findings; no credentials, tokens, or personal data recorded.

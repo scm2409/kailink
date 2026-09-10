@@ -261,19 +261,151 @@ the rendered notification remain device-manual checks
 (`docs/manualtest-protokoll.md`, MT-5/MT-6/MT-8). This checklist exists
 so those manual steps are checkable line by line.
 
-## Observed run finding (2026-09-10) — x86_64 debug/emulator build not evaluatable
+## Superseded run finding (2026-09-10, morning) — corrected below
 
-The pinned Gradle dependency `org.matrix.rustcomponents:sdk-android:26.09.08`
-was inspected from the Gradle cache at the AAR level. An `unzip` listing of
-the AAR showed **zero entries under `lib/`** — the AAR contains no native
-`.so` libraries at all, and in particular **no x86_64 libraries**. Therefore
-the prescribed x86_64 debug/emulator build cannot be evaluated or produced
-from this pinned SDK. The ABI/emulator installation, logcat, and gate steps
-were **intentionally not run** — there is nothing to install for the
-emulator ABI from this artifact.
+The following earlier finding was **wrong and is superseded** by the
+corrected finding below. It is kept here (history, marked as superseded
+so the wrong claim is never re-cited):
 
-**No ABI switch, no AVD switch, and no fallback implementation was made.**
-The next approach (different SDK artifact, ABI selection, or build
-configuration) is left for the project owner to decide. The checklist
-instructions and verification assertions above are unchanged; this finding
-is diagnostic documentation only.
+> The pinned Gradle dependency `org.matrix.rustcomponents:sdk-android:26.09.08`
+> was inspected from the Gradle cache at the AAR level. An `unzip` listing of
+> the AAR showed **zero entries under `lib/`** — the AAR contains no native
+> `.so` libraries at all, and in particular **no x86_64 libraries**. Therefore
+> the prescribed x86_64 debug/emulator build cannot be evaluated or produced
+> from this pinned SDK.
+
+**Correction (2026-09-10, coordinator correction, verified in this run):**
+the earlier inspection queried the **wrong archive path**. Android AARs
+store native libraries under `jni/<abi>/`, not `lib/` — a grep for `lib/`
+misses them. The actual AAR (Gradle cache path
+`org.matrix.rustcomponents/sdk-android/26.09.08/3525685e…/sdk-android-26.09.08.aar`)
+contains exactly the expected native libraries:
+
+```
+jni/arm64-v8a/libmatrix_sdk_ffi.so   (63,378,440 bytes)
+jni/armeabi-v7a/libmatrix_sdk_ffi.so (41,642,748 bytes)
+jni/x86/libmatrix_sdk_ffi.so         (73,037,112 bytes)
+jni/x86_64/libmatrix_sdk_ffi.so      (69,989,968 bytes)
+```
+
+The x86_64 emulator build therefore works with the pinned SDK, unchanged.
+`./gradlew :app:assembleEmulatorDebug --offline` produces
+`app/build/outputs/apk/emulatorDebug/app-emulatorDebug.apk` containing
+`lib/x86_64/libmatrix_sdk_ffi.so` (69,989,968 bytes); the gate's
+`app-emulatorDebug.apk` installs with `primaryCpuAbi=x86_64` on the
+kailink-atd35 AVD. The earlier "no-matching-ABIs" installation failure
+came from installing the arm64-only `debug` APK by mistake.
+
+## Observed run (2026-09-10, afternoon) — registration classified, chain proven
+
+Setup: x86_64 AVD `kailink-atd35` (API 35, `emulator-5554`), only
+`app-emulatorDebug.apk` installed (versionName 0.2.7-phase1),
+ntfy Android 1.25.2 (`io.heckel.ntfy`, versionCode 63) installed with
+`POST_NOTIFICATIONS` granted to both apps, Conduit/ntfy/nginx-TLS gate
+containers running, `adb reverse` for tcp:6167/tcp:8090/tcp:8443.
+
+**Classification of the observed break: case (c)** — both diagnostic
+lines (`calling UnifiedPush.register`, `UnifiedPush.register returned`)
+appear, distributor `io.heckel.ntfy`, but no `up*` endpoint and no
+`up*` pusher. Root cause found **between KaiLink and the distributor**:
+the REGISTER broadcast is never sent at all.
+
+- KaiLink side (connector 3.3.5 `DBStore` inspection on device):
+  `registrations` has the row (`instance=default`, empty message/vapid),
+  `keys` has the WebPush keys, but `distributors` and `tokens` are
+  **empty**. In connector 3.3.5, `UnifiedPush.register(context)` builds
+  the broadcast from the token set returned by
+  `DBStore.RegistrationsStore.set(...)` — and `set()` only creates
+  tokens for distributors **already present in the connector's
+  `distributors` table**. With that table empty, `register()` returns
+  silently without sending any broadcast (exactly what the logs show).
+  The connector KDoc for `register` states: *"saveDistributor must be
+  called before this function."*
+- `UnifiedPushRegistrar.tryRegister` calls `UnifiedPush.saveDistributor`
+  only in the `ToSelect` branch, **not** in the `Found` branch
+  (`UnifiedPushRegistrar.kt:32` — `Found` goes straight to
+  `register(resolved.packageName)`). On a fresh install with the single
+  distributor ntfy, `resolveDefaultDistributor` resolves `Found` (via
+  the OS `unifiedpush://link` resolution), so nothing is ever saved and
+  the broadcast never fires. This matches failure mode 5's shape
+  (state stuck at `READY`/"Push: registering …"), but the gap is in the
+  registrar's `Found` branch, not in broadcast delivery.
+
+**Distributor server determination (case (c) requirement):** the ntfy
+Android app's saved `DefaultBaseURL` (read-only inspection of
+`/data/data/io.heckel.ntfy/shared_prefs/MainPreferences.xml`) is
+`http://127.0.0.1:8090` — the **Podman ntfy container** via the gate's
+`adb reverse` tunnel. **Not ntfy.sh.** A root-shell `REGISTER` probe to
+`io.heckel.ntfy` created the `up*` subscription with
+`baseUrl=http://127.0.0.1:8090` and sent `NEW_ENDPOINT`
+(`http://127.0.0.1:8090/up…?up=1`) — the distributor itself works.
+
+**Additional environment fact (delivery leg):** the ntfy distributor
+gates its subscriber connections on
+`ConnectivityManager.activeNetwork != null`
+(`SubscriberService.reallyRefreshConnections()`; notification shows
+"Waiting for network"). The kailink-atd35 AVD booted with **no active
+default network** ("Active default network: none") — the known
+"emulator network broken" condition the gate tunnels around. KaiLink's
+loopback sockets work without a default network, but the ntfy app does
+not connect. Provisioning the emulator's virtual AP
+(`adb shell cmd wifi connect-network AndroidWifi open` →
+`Active default network: 100`, IP 10.0.2.16) makes the ntfy app listen
+("Listening for incoming notifications", established connections to
+127.0.0.1:8090). Gate-infrastructure provisioning, no project change.
+
+**Proof that everything after the missing `saveDistributor` works
+(diagnostic device-state injection, not a code fix):** inserting the
+`distributors` row exactly as `saveDistributor` would
+(`INSERT INTO distributors (distributor, fallback_from, ack,
+date_insertion) VALUES ('io.heckel.ntfy', NULL, 0, <ms>)` in
+`/data/data/org.box44.kailink/databases/unifiedpush-connector`) and
+restarting the app produces the full chain:
+
+- `REGISTER received for app org.box44.kailink (connectorToken=…)` —
+  AND_3.1.0 shared-identity path (`Package name retrieved with shared
+  identity`).
+- ntfy subscription `up3QmdfC4EJh51` created on
+  `http://127.0.0.1:8090` (Podman server).
+- `NEW_ENDPOINT http://127.0.0.1:8090/up3QmdfC4EJh51?up=1`.
+- KaiLink logs `UnifiedPush endpoint registered as Matrix pusher
+  (gateway: https://ntfy.sh/_matrix/push/v1/notify)` and
+  `Push endpoint registered as Matrix pusher`; Conduit `GET /pushers`
+  then shows the run pusher with
+  `pushkey: http://127.0.0.1:8090/up3QmdfC4EJh51?up=1`.
+- Room list reaches **"Push: registered (UnifiedPush)"**
+  (`PushState.REGISTERED`) — checklist Step 7 criterion met.
+
+**Real push delivery (outermost observable effect):** a Bob message sent
+through Conduit (`kailink-push-task3` room), with the gateway notify
+body (the exact `{"notification":{…}}` shape the homeserver POSTs, same
+as gate step C2b) published to the real `up*` topic on the Podman ntfy:
+ntfy → UnifiedPush MESSAGE → `KaiLinkPushReceiver` (connector WebPush
+decrypt attempt, plaintext fallback, expected for this chain) →
+`PushMessageHandler` (parse → session restore → `syncOnce()` →
+notification resolution) → **rendered KaiLink notification** on channel
+"Push messages": title `kailink-push-task3`, text
+`kailink_bob: Task 3 push delivery probe`. A malformed event id
+(delivery test with a truncated `event_id`, no leading `$`) was also
+handled correctly: `Notification fetch failed:
+msg=leading sigil is incorrect or missing, details=MissingLeadingSigil`
+— resolution failure surfaced, app stayed up, wake-up sync ran.
+
+**Configuration gap (reported, NOT changed):** KaiLink registers the
+pusher with `data.url = https://ntfy.sh/_matrix/push/v1/notify`
+(`PushConfiguration.DEFAULT_GATEWAY_URL`) while the distributor's
+endpoint is the local Podman server. A Conduit-initiated push for the
+**app's own pusher** would go to public ntfy.sh (where nobody listens
+for the local topic) instead of the Podman ntfy. The gate covers this
+hop only for its synthetic test pusher (`e2e.pusher_gateway
+http://kailink-e2e-ntfy`). The delivery leg above therefore used the
+Podman ntfy topic directly (identical gateway bytes) — every hop of the
+chain is proven by gate + this run, except Conduit→(app's own pusher
+pointing at ntfy.sh), which cannot deliver in this environment by
+design of the current default.
+
+**Fix ownership:** the one-line registrar fix (call
+`UnifiedPush.saveDistributor` in the `Found` branch before
+`register`) and any gateway decision are project-owner decisions; no
+source, build config, dependencies, or gate behavior was changed for
+these findings.
