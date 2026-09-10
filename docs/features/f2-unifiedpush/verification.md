@@ -38,3 +38,19 @@ On Martin's GrapheneOS device, distributor selection, endpoint rotation,
 push sync, and notification are to be checked. The runtime permission
 `POST_NOTIFICATIONS` and emoji verification in Element X are also
 manual. Real matrix.org credentials are not used in the harness.
+
+## Observed run finding (2026-09-10)
+
+Diagnostic run: the pinned Gradle dependency
+`org.matrix.rustcomponents:sdk-android:26.09.08` was inspected from the
+Gradle cache at the AAR level. The `unzip` listing showed **zero entries
+under `lib/`** — the AAR has no native `.so` libraries, including no
+x86_64 libraries. Consequently the prescribed x86_64 debug/emulator build
+cannot be evaluated or produced from this pinned SDK, and the
+ABI/emulator installation, logcat, and gate steps were **intentionally
+not run**.
+
+**No ABI switch, no AVD switch, and no fallback implementation was made.**
+The next approach is left for the project owner to decide. No verification
+assertions above were changed or weakened; no source code, build
+configuration, tests, or dependencies were modified for this finding.

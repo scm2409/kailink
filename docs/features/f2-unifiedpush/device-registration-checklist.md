@@ -260,3 +260,20 @@ selection, the `REGISTER` broadcast, the ntfy subscription display, and
 the rendered notification remain device-manual checks
 (`docs/manualtest-protokoll.md`, MT-5/MT-6/MT-8). This checklist exists
 so those manual steps are checkable line by line.
+
+## Observed run finding (2026-09-10) — x86_64 debug/emulator build not evaluatable
+
+The pinned Gradle dependency `org.matrix.rustcomponents:sdk-android:26.09.08`
+was inspected from the Gradle cache at the AAR level. An `unzip` listing of
+the AAR showed **zero entries under `lib/`** — the AAR contains no native
+`.so` libraries at all, and in particular **no x86_64 libraries**. Therefore
+the prescribed x86_64 debug/emulator build cannot be evaluated or produced
+from this pinned SDK. The ABI/emulator installation, logcat, and gate steps
+were **intentionally not run** — there is nothing to install for the
+emulator ABI from this artifact.
+
+**No ABI switch, no AVD switch, and no fallback implementation was made.**
+The next approach (different SDK artifact, ABI selection, or build
+configuration) is left for the project owner to decide. The checklist
+instructions and verification assertions above are unchanged; this finding
+is diagnostic documentation only.
