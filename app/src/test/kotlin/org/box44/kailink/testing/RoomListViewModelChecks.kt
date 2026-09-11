@@ -56,6 +56,26 @@ fun roomListViewModelChecks() {
         viewModel.clear()
     }
 
+    Checks.check("restored session shows 12 already-loaded rooms without activity") {
+        val client = FakeChannelClient().apply {
+            roomsBehavior = {
+                List(12) { index -> TEST_ROOM.copy(id = "!room${index + 1}:example.org") }
+            }
+        }
+        runBlocking { client.restore(TEST_SESSION) }
+
+        val viewModel = RoomListViewModel(
+            client,
+            MutableStateFlow(org.box44.kailink.domain.push.PushState.NOT_AVAILABLE),
+            viewModelScope(),
+        )
+
+        expectEquals(12, viewModel.ui.value.rooms.size, "already-loaded rooms shown")
+        expectEquals(0, client.syncOnceCalls, "restored room list does not sync")
+        expectEquals(0, client.sendMessageCalls.size, "restored room list does not send messages")
+        viewModel.clear()
+    }
+
     Checks.check("refresh keeps the room list usable when live sync is unavailable") {
         val client = FakeChannelClient()
         client.startLiveSyncBehavior = {

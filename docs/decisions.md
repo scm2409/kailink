@@ -541,3 +541,38 @@ constitution); the existing E2E script was preserved unchanged.
   the user. That warning is a later-release requirement, not a 0.2.10
   implementation; this release does not add the warning or change room
   creation behavior.
+
+## 0.2.11: expose restored rooms before explicit refresh
+
+- **Bug:** after session restore, the room screen could remain empty even when
+  the SDK client already held loaded rooms. The regression check reproduced
+  this with 12 cached rooms and observed one unexpected `syncOnce()` call; the
+  list was dependent on startup refresh activity rather than restored client
+  state.
+- **Root cause:** `RoomListViewModel` called `refresh()` from `init`. That
+  method performs `syncOnce()`, starts live sync, and only then reads
+  `channelClient.rooms()`. Startup had no direct cached-room read, so
+  `RoomListUiState` could not expose rooms already available after restore
+  without a sync event or another activity.
+- **Fix:** `RoomListViewModel` now calls a small `loadCachedRooms()` startup
+  path that reads `channelClient.rooms()` and updates `RoomListUiState`
+  directly. `refresh()` remains the explicit sync/live-sync action; no SDK,
+  push, dependency, or 0.2.10 diagnostics behavior changed.
+- **Reference comparison:** Element X's
+  `features/home/impl/src/main/kotlin/io/element/android/features/home/impl/datasource/RoomListDataSource.kt`
+  collects room-list summaries exposed by `RoomListService`, while
+  `libraries/matrix/impl/src/main/kotlin/io/element/android/libraries/matrix/impl/roomlist/RoomSummaryListProcessor.kt`
+  retains the latest summaries for new collectors. KaiLink has no equivalent
+  SDK summary flow, so the minimal equivalent is reading the client's current
+  `rooms()` snapshot at ViewModel startup instead of waiting for
+  `RoomsUpdated`.
+- **TDD evidence:** the preserved `RoomListViewModelChecks` regression was
+  red at 114 checks (`113 passed, 1 failed`: restored 12 rooms, expected
+  `syncOnceCalls == 0`, actual `1`) and green after the fix with
+  `:app:testDebugUnitTest --tests org.box44.kailink.testing.AllChecksTest`.
+- **Version and gate scope:** `0.2.11` (versionCode 9). The emulator gate
+  remains the cross-process proof for the Conduit, ntfy, distributor, Android,
+  and rendered-notification chain; it does not specifically exercise a
+  process restart with preloaded room state. The regression is covered by the
+  JVM check, while that restored-session device scenario remains device-test
+  scope.

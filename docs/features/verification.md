@@ -814,3 +814,51 @@ practice win, and Martin requested the quality push.
 E2EE. A later release must visibly warn when an agent room is unencrypted;
 0.2.10 records the requirement but intentionally does not implement that
 warning or alter room creation.
+
+## 16. 0.2.11 — restored room-list startup fix (2026-09-11)
+
+**Bug and red evidence:** the preserved regression in
+`app/src/test/kotlin/org/box44/kailink/testing/RoomListViewModelChecks.kt`
+created a restored session whose client already contained 12 rooms. The
+pre-fix `RoomListViewModel` constructor called `refresh()`, causing an
+unexpected sync before reading rooms. The focused run reported:
+`Checks: 114, passed: 113, failed: 1`, with
+`restored session shows 12 already-loaded rooms without activity` failing:
+`restored room list does not sync — expected: 0, actual: 1`.
+
+**Root cause and fix:** startup had no cache-read path. `init` entered the
+sync/live-sync path, while `RoomListUiState` was updated from
+`RoomsUpdated` or after refresh. The fix removes the constructor's implicit
+`refresh()` and adds `loadCachedRooms()`, which reads `channelClient.rooms()`
+and publishes the snapshot directly to `RoomListUiState`. Explicit
+`refresh()` still performs one-shot sync and live-sync startup, so refresh
+behavior and all existing assertions remain intact. This is the small
+equivalent of Element X's replayed room-summary design in
+`features/home/impl/src/main/kotlin/io/element/android/features/home/impl/datasource/RoomListDataSource.kt`,
+backed by `RoomSummaryListProcessor` in
+`libraries/matrix/impl/src/main/kotlin/io/element/android/libraries/matrix/impl/roomlist/RoomSummaryListProcessor.kt`.
+
+**Green JVM evidence:**
+`./gradlew --offline :app:testDebugUnitTest --tests org.box44.kailink.testing.AllChecksTest`
+completed with `BUILD SUCCESSFUL`; the check runner completed all 114 checks
+without failure. The focused regression now exposes all 12 cached rooms with
+zero `syncOnce()` and zero message sends.
+
+**Full E2E gate:** `./scripts/emulator-e2e.sh` completed with exit code 0.
+The unchanged three-leg gate built and installed the emulator and test APKs,
+then recorded:
+
+- Leg 6: `OK (2 tests)`, `Time: 274.764` (two-account timeline plus TLS path).
+- Leg 7: `OK (1 test)`, `Time: 93.929` (fresh-install UnifiedPush endpoint,
+  pusher, and rendered notification).
+
+The gate proves the existing Conduit, ntfy, distributor, Android, and rendered
+notification boundaries. It does not specifically prove process-restart
+restoration with preloaded room state; that behavior is covered by the JVM
+regression and remains a device-test scope gap. No cleanup or retry was needed.
+
+**Version and artifact:** source version is `0.2.11`, versionCode `9`.
+`./gradlew --offline :app:assembleDebug` completed with `BUILD SUCCESSFUL`.
+The arm64 debug APK is
+`app/build/outputs/apk/debug/app-debug.apk`, size `77656148` bytes, SHA-256
+`43c5c8696bc2968c384bcad52c00c78888955fd6f644ea0fb619e558317cf449`.

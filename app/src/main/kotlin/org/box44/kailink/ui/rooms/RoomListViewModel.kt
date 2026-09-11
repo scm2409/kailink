@@ -71,7 +71,27 @@ class RoomListViewModel(
                 }
             }
         }
-        refresh()
+        loadCachedRooms()
+    }
+
+    /** Expose the SDK's already-loaded rooms before an explicit sync. */
+    private fun loadCachedRooms() {
+        scope.launch {
+            try {
+                _ui.update {
+                    it.copy(
+                        rooms = channelClient.rooms(),
+                        refreshing = false,
+                        error = null,
+                        userId = channelClient.activeSession?.userId,
+                    )
+                }
+            } catch (t: Throwable) {
+                _ui.update {
+                    it.copy(refreshing = false, error = t.message ?: "Could not load rooms")
+                }
+            }
+        }
     }
 
     fun refresh() {
