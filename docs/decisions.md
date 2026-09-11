@@ -338,3 +338,163 @@ constitution); the existing E2E script was preserved unchanged.
   finding), and worst-leg exit semantics (`run_leg`/`GATE_STATUS` —
   `am instrument` exits 0 even on test failures, so the gate must
   aggregate). Existing leg 6 assertions unchanged.
+
+## 0.2.9: the push-path notification fetch carries the session's sliding sync version (VersionIsMissing fix)
+
+- **Bug (0.2.8 device log):** on the device, the push-path notification
+  resolution failed with `VersionIsMissing` ("Sliding sync version is
+  missing") while the main client had detected NATIVE at sign-in
+  (sign-in log line `Sliding sync version: NATIVE`). The 0.2.8
+  construction of the SDK `NotificationClient`
+  (`Client.notificationClient(NotificationProcessSetup.MultipleProcesses)`)
+  took no version input — version-blind.
+- **Mechanism (SDK sources, pinned `sdk-android:26.09.08` era):**
+  - FFI `Client::notification_client` (bindings/matrix-sdk-ffi/src/
+    client.rs) wraps the whole inner client into the
+    `matrix_sdk_ui::NotificationClient`; there is **no** version
+    parameter on the FFI construction and **no** public
+    `set_sliding_sync_version` on the Kotlin `Client` (verified by
+    `javap` of the pinned AAR: only
+    `notificationClient(NotificationProcessSetup)` and the getter
+    `slidingSyncVersion()`).
+  - `matrix_sdk_ui::notification_client` builds the short-lived
+    notification sliding sync from that parent client
+    (`Client::sliding_sync(CONNECTION_ID)` →
+    `SlidingSyncBuilder::build`), which fails with `VersionIsMissing`
+    for a client carrying `Version::None`
+    (crates/matrix-sdk/src/sliding_sync/builder.rs + error.rs).
+  - The push-path client's version is set by the FFI restore from the
+    persisted session record
+    (`restore_session` → `restore_session_with` →
+    `self.inner.set_sliding_sync_version(session.sliding_sync_version)`),
+    or by the DISCOVER_NATIVE build at login. So the fetch is
+    version-correct only if the session's detected/persisted mode is
+    carried into the construction — a version-blind construction runs
+    with whatever the push-path client happens to carry and fails with
+    `VersionIsMissing` for a NONE-mode session on a capable homeserver.
+- **Decision:** `MatrixSdkChannelClient.fetchNotification` maps the
+  active session's mode
+  (`domainModeToSdkVersion(activeSession.slidingSyncMode)`) and passes
+  it as an explicit input into the new construction seam
+  `notificationClientFactory: suspend (Client, SlidingSyncVersion?) ->
+  NotificationClient?` (JVM-testable; tested by
+  `NotificationClientVersionChecks`, registered in `AllChecks`). The
+  default factory encodes the SDK semantics per version:
+  - `NATIVE` (and the defensive `null` for a session-less state):
+    standard construction — the parent client carries the
+    DISCOVER_NATIVE-detected (login) or restore-set version, so the
+    notification sliding sync builds on capable homeservers ("SDK
+    DISCOVER_NATIVE semantics where supported").
+  - `NONE`: no construction — on a sliding-sync-less homeserver the
+    notification sliding sync could never build
+    (`VersionIsMissing` is a guaranteed failure), so the fetch returns
+    `null` deterministically and `PushMessageHandler` falls back to the
+    room list; `obtainNotificationClient` logs
+    `NotificationClient skipped: homeserver has no sliding sync (NONE);
+    room-list fallback`. Observable Conduit/fallback behavior is
+    unchanged (the pre-0.2.9 path reached the same `null` via the
+    failing `get_notification` call, minus the doomed SDK call).
+- **TDD evidence:** RED first against the pre-fix wiring (seam present,
+  forwarding `null`): the two mode-flow checks failed with exactly
+  `expected: NATIVE, actual: null` / `expected: NONE, actual: null`
+  (`Checks: 98, passed: 96, failed: 2`); after strengthening (URL/mode
+  decorrelation + session-less defensive check, no assertions
+  weakened) the same two failures remained. GREEN:
+  `Checks: 99, passed: 99, failed: 0` (full output in
+  `docs/features/verification.md` §13 and
+  `docs/features/f2-unifiedpush/verification.md`).
+- **Gate environment change (2026-09-10/11 observed):** the current
+  Conduit gate image advertises `org.matrix.simplified_msc3575: true`
+  in `GET /_matrix/client/versions` (checked on
+  `http://127.0.0.1:6167`) — the 0.2.5-phase1 statement "Conduit does
+  not serve the flag" no longer holds for the current image. Gate
+  sessions detect NATIVE (`Sliding sync version: NATIVE` in logcat for
+  legs 6 and 7), the SDK notification fetch ran its notification
+  sliding sync against the gate homeserver
+  (`get_notification{…} > try_sliding_sync >
+  sync_once{conn_id="notifications"}` → HTTP 200), and leg 7 rendered
+  the notification on the 0.2.9 build. **Blind spot:** the NONE branch
+  of the fix (skip → room-list fallback) is therefore no longer
+  exercised end-to-end by the gate (a sliding-sync-less session no
+  longer occurs there); the NONE *builder* fallback is still exercised
+  by the TLS leg via a discovery transport failure, but no NONE session
+  ever runs a push fetch in the gate. The NONE branch is proven at the
+  wiring level by the JVM checks only.
+- **Version:** `0.2.9` (versionCode 7). The first DebugLog line remains
+  the BuildConfig self-identification — now
+  `KaiLink 0.2.9 (versionCode 7)`; format and "very first line" rule
+  unchanged (`data/log/AppIdentity`).
+- **Required 0.2.9 device retest (gate cannot cover):** (1) matrix.org
+  push → notification with SDK-resolved content and no
+  `VersionIsMissing` in the Send-log dump; (2) optionally a
+  sliding-sync-less homeserver → the skip log line and unchanged
+  fallback behavior. **Follow-up (owner decision, not implemented
+  here):** a session whose stored mode is stale-NONE on a capable
+  homeserver (e.g. signed in during a failed discovery fallback)
+  degrades to the room-list fallback forever, because the FFI restore
+  overwrites the built client's version with the record's version and
+  the pinned SDK exposes no version setter; the candidate fix is
+  re-detecting the mode at restore (DISCOVER_NATIVE probe when the
+  record says NONE) — a separate, decision-gated change.
+
+## 0.2.9: explicit sliding sync version forwarding to the push-path `NotificationClient`
+
+- **Decision:** `MatrixSdkChannelClient.fetchNotification` maps the active
+  session's detected/persisted sliding sync mode
+  (`activeSession?.slidingSyncMode`) 1:1 to the SDK version via
+  `domainModeToSdkVersion` and passes it as an EXPLICIT input to the new
+  `notificationClientFactory` construction seam
+  (`suspend (Client, SlidingSyncVersion?) -> NotificationClient?`). The
+  default factory encodes the SDK semantics per version: `NATIVE` (or an
+  unknown/legacy `null`) constructs the SDK `NotificationClient`
+  (`NotificationProcessSetup.MultipleProcesses`, the dedicated push-process
+  setup — the push process has no `SyncService`); `NONE` skips the
+  construction entirely, so the fetch returns `null` and the caller
+  (`PushMessageHandler`) falls back to the room-list payload (unchanged
+  Conduit/fallback behavior).
+- **Why:** the SDK `NotificationClient` (MultipleProcesses) builds its
+  short-lived notification sliding sync from the parent client, and
+  `SlidingSyncBuilder::build` fails with `VersionIsMissing` ("Sliding sync
+  version is missing") when the parent client carries no sliding sync
+  version. The FFI `notificationClient` constructor takes no version
+  parameter, so the app-side control is *which* parent client the
+  notification fetch runs against: the 0.2.8 device failure against
+  matrix.org showed the version-less construction failing
+  (`NotificationClient unavailable` in the push path) while the main
+  client had detected NATIVE via `SlidingSyncVersionBuilder.DISCOVER_NATIVE`
+  — the notification fetch must run with that detected version. On
+  Conduit-class homeservers (`NONE`) the notification sliding sync could
+  never build, so constructing it (and re-throwing per push) was pure
+  failure overhead; skipping construction makes the room-list fallback the
+  first-class path there.
+- **Testability seam:** `notificationClientFactory` is a constructor
+  parameter with the SDK-default semantics as its default value. The JVM
+  checks (`NotificationClientVersionChecks`, registered in
+  `AllChecks.runAllChecks`) inject a recording factory and assert the
+  version flow: NATIVE session mode → `SlidingSyncVersion.NATIVE` at the
+  seam, NONE session mode → `SlidingSyncVersion.NONE` (homeserver URL
+  deliberately decorrelated: matrix.org URL with NONE session proves the
+  version comes from the session's mode, never from the URL), session-less
+  defensive state → `null` (SDK default semantics, no crash). The Rust FFI
+  `Client` cannot be built on the JVM; `Client(NoHandle)` is the
+  handle-less non-null construction token, never touching FFI because the
+  injected factory does not use it. Active-session state is set via
+  reflection (test-only; no production hook added).
+- **Version:** `0.2.9` (versionCode 7). The first DebugLog line stays the
+  BuildConfig self-identification — now emitted as
+  `KaiLink 0.2.9 (versionCode 7)`; format and "very first line" rule
+  unchanged (`data/log/AppIdentity`).
+- **Gate:** unchanged — `scripts/emulator-e2e.sh` legs 6/7 exercise the
+  push chain against the current Conduit gate image, which advertises
+  `org.matrix.simplified_msc3575: true` (observed 2026-09-10/11 on
+  `http://127.0.0.1:6167`), so gate sessions detect NATIVE and the NATIVE
+  construction path of the fix is exercised end-to-end through the real
+  chain (leg 7's fetch ran the notification sliding sync against the gate
+  homeserver and rendered the notification — see the 0.2.9 section in
+  `docs/features/f2-unifiedpush/verification.md`). What the gate cannot
+  prove: the NONE skip branch (a sliding-sync-less session no longer
+  occurs there — wiring proven by the JVM checks only), and the real push
+  path against a sliding-sync-capable homeserver (e.g. matrix.org), which
+  remains a physical-device check for the actual `VersionIsMissing` fix
+  on-device. (Correction 2026-09-11: this bullet previously claimed gate
+  sessions are `NONE`; contradicted by the observed `/versions` flag.)

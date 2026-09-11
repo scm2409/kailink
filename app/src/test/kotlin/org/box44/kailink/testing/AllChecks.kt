@@ -20,6 +20,7 @@ fun runAllChecks() {
     pushChainChecks()
     matrixTlsErrorMappingChecks()
     slidingSyncChecks()
+    notificationClientVersionChecks()
     debugLogChecks()
     sdkLogChecks()
     sendDebugLogChecks()

@@ -567,3 +567,169 @@ leg 7 publishes the exact notify body to the real topic (the same bytes
 Conduit posts, gate step C2b). Changing the default gateway URL is a
 project-owner decision and was **not** made here. A physical-device run
 remains the check for real GMS-less hardware behavior.
+
+## 13. 0.2.9 — push-path notification fetch carries the session's sliding sync version (2026-09-11)
+
+TDD order kept: the JVM checks for the new contract
+(`NotificationClientVersionChecks`) ran RED against the pre-fix wiring
+before the forwarding fix was implemented.
+
+**Bug (0.2.8, device log):** the push-path notification resolution
+failed with `VersionIsMissing` ("Sliding sync version is missing") on a
+device whose main client had detected NATIVE. The 0.2.8 construction of
+the SDK `NotificationClient` was version-blind; the SDK builds the
+notification sliding sync from the parent client and fails for a
+version-less/`NONE` client — the push-path client's version is
+restore-set from the persisted session record (mechanism and SDK source
+paths in `docs/decisions.md`).
+
+**RED run** (`./gradlew testDebugUnitTest --offline` → `BUILD FAILED`,
+task `:app:testDebugUnitTest`; report
+`app/build/reports/phase1-checks.txt`):
+
+```
+[ERROR]  notification fetch: main client's detected NATIVE mode flows into the
+         construction seam — construction seam must receive the NATIVE version
+         detected by the main client — expected: NATIVE, actual: null
+[ERROR]  notification fetch: main client's NONE mode flows into the construction
+         seam as NONE — construction seam must receive NONE for a classic-/sync
+         session (no drop to version-less) — expected: NONE, actual: null
+Checks: 98, passed: 96, failed: 2
+```
+
+Test strengthening before the fix (no assertions weakened): NONE check
+decorrelated from the URL (`https://matrix.org` + NONE session), plus a
+session-less defensive check (`null` version → SDK default semantics).
+Strengthened RED: same two failures (`Checks: 99, passed: 97, failed:
+2`).
+
+**Fix:** `MatrixSdkChannelClient.fetchNotification` maps
+`activeSession.slidingSyncMode` → `domainModeToSdkVersion` and forwards
+the version into the explicit `notificationClientFactory(Client,
+SlidingSyncVersion?)` seam. Default factory: NATIVE/`null` → standard
+SDK construction (parent client carries the DISCOVER_NATIVE-detected or
+restore-set version — "SDK DISCOVER_NATIVE semantics where supported");
+NONE → no construction, fetch returns `null` → room-list fallback with
+an explicit log line (Conduit/fallback behavior preserved; the doomed
+`VersionIsMissing` call is replaced by a deterministic skip).
+
+**GREEN runs:**
+
+- `./gradlew testDebugUnitTest --offline` → `BUILD SUCCESSFUL`;
+  `Checks: 99, passed: 99, failed: 0`.
+- `./gradlew testDebugUnitTest assembleDebug --offline` → `BUILD
+  SUCCESSFUL` (80 tasks: 3 executed, 77 up-to-date).
+
+**Version:** `0.2.9` (versionCode 7); first DebugLog line stays the
+BuildConfig self-identification (`KaiLinkApp.onCreate` →
+`AppIdentity.startupLine`), now `KaiLink 0.2.9 (versionCode 7)`;
+`aapt2 dump badging` of the rebuilt APK:
+`versionCode='7' versionName='0.2.9'`.
+
+**Gate run on 0.2.9:** `./scripts/emulator-e2e.sh` → both legs OK
+(leg 6 `OK (2 tests)`, `Time: 274.812`; leg 7 `OK (1 test)`,
+`Time: 94.031`); installed build on the emulator:
+`versionCode=7 versionName=0.2.9`; identity line in logcat:
+`I KaiLink : KaiLink 0.2.9 (versionCode 7)`. Leg 7: real UI sign-in →
+`Push: registered (UnifiedPush)` → real `up*` pusher on Conduit → real
+event through the real distributor → **notification rendered** (body
+asserted in `dumpsys notification --noredact`). The SDK notification
+fetch ran its notification sliding sync against the gate homeserver
+(observed span: `get_notification{…} > try_sliding_sync >
+sync_once{conn_id="notifications"} … status=200`) — the NATIVE
+construction path of the fix is exercised through the real chain.
+
+**What the gate proves / what it cannot prove (honesty):** proven — the
+NATIVE construction path end-to-end on the gate, both JVM-mapped modes
+(NATIVE/NONE) reaching the construction seam, the defensive `null`
+branch, and the preserved build/sign-in/push chain (all existing
+assertions intact). Not provable with current infrastructure — the
+**NONE fetch branch end-to-end**: the current Conduit gate image now
+advertises `org.matrix.simplified_msc3575` in `/versions` (observed
+2026-09-10/11), so gate sessions detect NATIVE and a sliding-sync-less
+session no longer occurs in the gate (the 0.2.5-era "Conduit does not
+serve the flag" statement is outdated for the current image). The NONE
+branch is covered by the JVM wiring checks; its end-to-end behavior
+(skip → room-list fallback, explicit log line) requires a
+sliding-sync-less homeserver. **Required 0.2.9 device retest** (not
+covered locally): matrix.org push → SDK-resolved notification content
+with no `VersionIsMissing` in the Send-log dump; optionally a
+Conduit-class homeserver for the NONE path. Follow-up (owner decision,
+not implemented): re-detect the sliding sync mode at restore for
+stale-NONE session records on capable servers (details in
+`docs/decisions.md`). No credentials, tokens, or personal data were
+recorded.
+
+## 13. 0.2.9 — explicit sliding sync version forwarding to the push-path `NotificationClient`: red first, then the forwarding fix turns it green (2026-09-11)
+
+**Bug (0.2.8 device evidence):** the push-path notification resolution
+(`MatrixSdkChannelClient.fetchNotification`) constructed the Rust SDK
+`NotificationClient` (`NotificationProcessSetup.MultipleProcesses`)
+**without carrying the main client's detected/persisted sliding sync
+version**. On matrix.org the main client detects NATIVE via
+`SlidingSyncVersionBuilder.DISCOVER_NATIVE`, but the version-less
+notification construction builds its short-lived notification sliding sync
+from the parent client and fails with `VersionIsMissing` ("Sliding sync
+version is missing") — the notification fetch died before any payload
+mapping, leaving only the room-list fallback. The FFI
+`notificationClient` constructor takes no version parameter, so the fix
+carries the version as an explicit app-side input.
+
+**TDD order kept:** the seam checks
+(`app/src/test/kotlin/org/box44/kailink/testing/NotificationClientVersionChecks.kt`,
+registered in `AllChecks.runAllChecks`) assert the version flow into the
+new `notificationClientFactory` construction seam
+(`suspend (Client, SlidingSyncVersion?) -> NotificationClient?`).
+
+**Red run (reproduced 2026-09-11):** with the 0.2.8-style wiring
+(seam present, version not forwarded — construction invoked with `null`):
+`./gradlew :app:testDebugUnitTest --rerun --offline` → `BUILD FAILED`,
+`Checks: 99, passed: 97, failed: 2`:
+
+```
+AFFECTED: notification fetch: main client's detected NATIVE mode flows into the construction seam — construction seam must receive the NATIVE version detected by the main client — expected: NATIVE, actual: null
+AFFECTED: notification fetch: main client's NONE mode flows into the construction seam as NONE — construction seam must receive NONE for a classic-/sync session (no drop to version-less) — expected: NONE, actual: null
+```
+
+**Fix (production):** `fetchNotification` maps the active session's mode
+(`activeSession?.slidingSyncMode` → `domainModeToSdkVersion`) and passes
+it to `obtainNotificationClient` → `notificationClientFactory`. Default
+factory semantics per version: `NATIVE`/`null` constructs the SDK
+`NotificationClient` (MultipleProcesses — the push process has no
+`SyncService`); `NONE` skips construction (the notification sliding sync
+could never build on a Conduit-class homeserver), logs the skip, returns
+`null` → the caller falls back to the room-list payload (unchanged
+behavior). The session-less defensive state maps to `null` (SDK default
+semantics, no crash). A recording-factory check proves the version comes
+from the session's mode, never the homeserver URL (matrix.org URL paired
+with a NONE session yields `NONE` at the seam).
+
+**Version:** `0.2.9` (versionCode 7); first DebugLog line remains the
+BuildConfig self-identification, now `KaiLink 0.2.9 (versionCode 7)`.
+
+**Green run:** `./gradlew testDebugUnitTest assembleDebug --offline` →
+`BUILD SUCCESSFUL`; `Checks: 99, passed: 99, failed: 0`
+(`app/build/reports/phase1-checks.txt`).
+
+**What the gate proves / what it cannot prove (honesty):** the E2E gate
+(`scripts/emulator-e2e.sh`) is unchanged; the current Conduit gate image
+advertises `org.matrix.simplified_msc3575: true` (observed 2026-09-10/11
+on `http://127.0.0.1:6167`), so gate sessions detect NATIVE and the
+NATIVE construction path of the fix is exercised end-to-end through the
+real chain (leg 6/7, notification rendered — see the 0.2.9 section in
+`docs/features/f2-unifiedpush/verification.md`). What the gate cannot
+prove: the NONE skip branch (a sliding-sync-less session no longer occurs
+there — the JVM checks prove the seam contract at the wiring level), and
+the real push path against a sliding-sync-capable homeserver (e.g.
+matrix.org) — a physical-device run remains the check that
+`VersionIsMissing` no longer fires on-device. (Correction 2026-09-11:
+this paragraph previously claimed gate sessions are `NONE`;
+contradicted by the observed `/versions` flag.)
+
+**Gate status (2026-09-11, latest verification attempt):** blocked by
+unavailable emulator — `emulator-5554` was offline, so the pure gate
+verification failed at its precondition check (exit 2,
+`Emulator not reachable: emulator-5554`) before any containers or tests
+ran; no gate check, assertion, or emulator setup was changed. The
+earlier "Gate run on 0.2.9 (2026-09-11)" records above stand as
+recorded.

@@ -82,6 +82,32 @@ class MatrixSdkChannelClient(
     private val gatewayUrl: String = PushConfiguration.DEFAULT_GATEWAY_URL,
     private val e2eeTestConfig: E2eeTestConfig? = null,
     private val onLog: (String) -> Unit = {},
+    /**
+     * Construction seam of the SDK `NotificationClient` for the push path
+     * (`fetchNotification`). The sliding sync version is an EXPLICIT input
+     * and carries the active session's detected/persisted mode
+     * (`domainModeToSdkVersion(activeSession.slidingSyncMode)`, 0.2.9 fix):
+     * the SDK `NotificationClient` (MultipleProcesses) builds its
+     * short-lived notification sliding sync from the parent client, and
+     * `SlidingSyncBuilder::build` fails with `VersionIsMissing` ("Sliding
+     * sync version is missing") when the client carries no version — the
+     * 0.2.8 device failure. The default construction therefore encodes the
+     * SDK semantics per version: NATIVE (or an unknown/legacy null) uses
+     * the standard construction whose parent client carries the
+     * DISCOVER_NATIVE-detected (or restore-set) version on capable
+     * homeservers; NONE (no sliding sync on the homeserver, e.g. Conduit)
+     * skips the construction — the notification sliding sync could never
+     * build, so the fetch returns `null` and the caller falls back to the
+     * room list (unchanged Conduit/fallback behavior).
+     */
+    private val notificationClientFactory: suspend (Client, SlidingSyncVersion?) -> NotificationClient? =
+        { client, version ->
+            when (version) {
+                SlidingSyncVersion.NATIVE, null ->
+                    client.notificationClient(NotificationProcessSetup.MultipleProcesses)
+                SlidingSyncVersion.NONE -> null
+            }
+        },
 ) : ChannelClient {
 
     private val _events = MutableSharedFlow<ChannelEvent>(
@@ -495,7 +521,15 @@ class MatrixSdkChannelClient(
     suspend fun fetchNotification(roomId: String?, eventId: String?): PushNotificationPayload? {
         if (roomId.isNullOrBlank() || eventId.isNullOrBlank()) return null
         val c = client ?: return null
-        val nc = obtainNotificationClient(c) ?: return null
+        // 0.2.9 fix: the construction seam receives the active session's
+        // detected/persisted sliding sync mode, mapped 1:1 to the SDK
+        // version. The FFI notification client has no version parameter, so
+        // this explicit carrier is the only app-side control over which
+        // sliding sync version the notification fetch runs with (see the
+        // `notificationClientFactory` KDoc for the per-version semantics).
+        val version = activeSession?.slidingSyncMode
+            ?.let(MatrixSdkChannelClient::domainModeToSdkVersion)
+        val nc = obtainNotificationClient(c, version) ?: return null
         val status = try {
             nc.getNotification(roomId, eventId)
         } catch (t: Throwable) {
@@ -516,13 +550,23 @@ class MatrixSdkChannelClient(
         }
     }
 
-    private suspend fun obtainNotificationClient(c: Client): NotificationClient? {
+    private suspend fun obtainNotificationClient(
+        c: Client,
+        version: SlidingSyncVersion?,
+    ): NotificationClient? {
         notificationClient?.let { return it }
         return try {
             // MultipleProcesses: the push process has no SyncService
             // (SingleProcess requires one) — the dedicated push-process setup.
-            c.notificationClient(NotificationProcessSetup.MultipleProcesses)
-                .also { notificationClient = it }
+            val constructed = notificationClientFactory(c, version)
+            if (constructed == null && version == SlidingSyncVersion.NONE) {
+                onLog(
+                    "NotificationClient skipped: homeserver has no sliding sync (NONE); " +
+                        "room-list fallback",
+                )
+            }
+            notificationClient = constructed
+            constructed
         } catch (t: Throwable) {
             onLog("NotificationClient unavailable: ${t.message}")
             null
