@@ -247,3 +247,25 @@ real chain. Consequences:
    renders via the room-list fallback only (no SDK content) — see the
    follow-up note in `docs/decisions.md` (owner decision: re-detect the
    mode at restore).
+
+## Verified gate run (2026-09-11) — 0.2.9, all 3 legs passed
+
+**Observed on 2026-09-11:** `scripts/emulator-e2e.sh` ran once on 0.2.9
+and passed all 3 legs: two-account E2E (2 instrumentation tests,
+`Time: 274.778`) and fresh-install push E2E (1 instrumentation test,
+`Time: 93.922`) — total measured instrumentation time 368.700 seconds;
+overall gate **exit code 0**.
+
+**Run conditions (documented):** emulator booted with
+`emulator -avd kailink-atd35 -no-window -no-audio -no-boot-anim -no-snapshot`;
+AndroidWifi connected; `pm path io.heckel.ntfy` succeeded; host
+available memory was 6216 MiB.
+
+**Earlier leg-6 failures (classification):** environmental (overlapping
+emulator instances and host memory pressure), not demonstrated code
+failures.
+
+**Honest limitation:** this gate proves the Conduit plus
+fresh-install/device push chain including the rendered notification, but
+does **not** prove the matrix.org native rendering path; a device test
+remains required.
