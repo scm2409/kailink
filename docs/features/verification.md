@@ -1,5 +1,62 @@
 # Verification (Current State)
 
+## Stage 1 Encrypted-Room Gate
+
+### Option C Boundary
+
+Stage 1 uses Option C for the push decision. Conduit v0.10.x does not expose a
+reliable emulator-observable probe that proves its autonomous push dispatch
+decision separately from the gateway delivery, so leg 4 substitutes only that
+decision after the test-only matrix-nio sender has verified the encrypted event
+on the wire. The instrumentation test reads Alice's real `/pushers` entries,
+retains exactly one pusher whose gateway URL is
+`http://kailink-e2e-ntfy/_matrix/push/v1/notify` as the persistent local-test
+pusher for telemetry, then requires exactly one `app_id=org.box44.kailink`
+pusher. It POSTs the genuine Matrix push-gateway notification containing the
+verified event ID, room ID, app ID, and that app pusher's pushkey, which must
+start with `http://127.0.0.1:8090/`. No fabricated pusher is registered and
+production configuration is unchanged.
+
+The Option C proof boundary is: **wake payload -> ntfy gateway conversion ->
+ntfy distributor delivery -> KaiLink push parsing -> sync -> Megolm decrypt ->
+rendered notification**. The server's autonomous push decision is outside the
+emulator scope. A matrix.org device test is required to prove that autonomous
+server decision and dispatch; this local gate does not claim that proof.
+
+**Proof target (2026-09-11):** leg 4 is a real cross-process test, not a
+synthetic notification assertion. The Android instrumentation test triggers the
+host-published matrix-nio sender and waits for its successful response. The
+sender uses a new throwaway account, creates and encrypts a Conduit room with
+`m.megolm.v1.aes-sha2`, invites the KaiLink Alice account, completes the join
+and key exchange, and sends a real encrypted event. The test's outermost
+assertion is `dumpsys notification --noredact` containing both
+`org.box44.kailink` and the exact generated message body.
+
+The gate proves **Conduit -> matrix-nio/vodozemac container -> KaiLink ->
+rendered Android notification**. It does not prove matrix.org, ntfy.sh, a real
+physical-device rendering path, or Stage 2 decimal-SAS verification. The
+existing legs 1-3 and their assertions remain unchanged; leg 4 is the only leg
+that starts the sender image. The sender image rebuild command is:
+
+```text
+podman build -t localhost/kailink-matrix-nio-sender:0.26.0 scripts/matrix-nio-sender
+```
+
+The pinned package/license evidence and account topology are recorded in
+`docs/decisions.md`. The sender's per-run state is cleaned after the leg and a
+missing/dead sender, non-2xx sender response, instrumentation failure, or
+missing notification fails the gate loudly. The timeout default is
+`E2E_AM_INSTRUMENT_TIMEOUT_SECONDS=900`; this was added after a transient
+diagnostic stall to bound each instrumentation leg without weakening its
+assertions.
+
+**Red-to-green proof chain:** the pre-existing red scaffold threw
+`NotImplementedError` before any notification check. Focused container evidence
+on 2026-09-11 showed a new sender account, room creation, recipient join,
+vodozemac initialization, encrypted send, and a real event ID. The authorized
+final full-gate run was completed once before this review; its generated output
+is deliberately not committed. This review does not rerun the emulator gate.
+
 > **Important (principle G8):** Only actually observed
 > results with dates appear here. If a verification means was missing (e.g. no device), that
 > is stated explicitly. Retrospectively added results are marked with a date.

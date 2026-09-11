@@ -13,7 +13,7 @@ built completely offline**: domain layer with seams, login with
 session restore, room list, timeline with sending, a
 push abstraction with a state machine, and verified JVM verification.
 
-> **Status: Phase 2 (as of 2026-09-09).** The real Matrix adapter
+> **Status: Phase 2 with Stage 1 encrypted-room E2E (as of 2026-09-11).** The real Matrix adapter
 > (`MatrixSdkChannelClient`, matrix-rust-sdk 26.09.08) and the
 > [UnifiedPush](https://unifiedpush.org/) integration (`UnifiedPushRegistrar` +
 > `KaiLinkPushReceiver`, connector 3.3.5, without Google/FCM) are compiled
@@ -48,7 +48,7 @@ failures="0"` (the test runs all 96 check-group checks), check report
 under `app/build/reports/phase1-checks.txt` (96/96 passed), see
 [`docs/features/verification.md`](docs/features/verification.md).
 Result: `app/build/outputs/apk/debug/app-debug.apk`
-(`org.box44.kailink`, versionName `0.2.7-phase1`, minSdk 28, targetSdk 36,
+(`org.box44.kailink`, versionName `0.2.9`, minSdk 28, targetSdk 36,
 including `libmatrix_sdk_ffi.so` from the matrix-rust-sdk).
 
 Since 0.2.4-phase1 every screen shows the version as a small footer, and the
@@ -56,8 +56,8 @@ room list offers a compact **Send log** action (signed-in only) that uploads
 the in-app debug log (ring buffer, ~1000 lines) as a `.txt` file into the
 KaiL room via the SDK attachment path (`Timeline.sendFile`). Since
 0.2.7-phase1 the very first debug-log line after app start identifies the
-app from BuildConfig (`KaiLink 0.2.7-phase1 (versionCode 5)`), and the
-signed-in rooms screen shows a one-line About row (`KaiLink 0.2.7-phase1`)
+app from BuildConfig (`KaiLink 0.2.9 (versionCode 7)`), and the signed-in
+rooms screen shows a one-line About row (`KaiLink 0.2.9`)
 in addition to the footer. The on-device UnifiedPush registration flow
 (with the exact broadcast actions, log lines, and failure modes) is
 documented in

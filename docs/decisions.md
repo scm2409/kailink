@@ -1,5 +1,115 @@
 # Decisions
 
+## Stage 1 encrypted-room gate (2026-09-11)
+
+### Option C push boundary
+
+- The Stage 1 leg uses Option C because Conduit v0.10.x has no dependable
+  dispatch probe that can be observed from the emulator to distinguish its
+  autonomous push decision from the subsequent gateway call. After the
+  test-only matrix-nio sender verifies the exact encrypted event on the wire,
+  `EncryptedRoomE2eTest` gets Alice's real pushers, retains exactly one entry
+  with gateway URL
+  `http://kailink-e2e-ntfy/_matrix/push/v1/notify` as the persistent local-test
+  pusher for telemetry, and independently requires exactly one
+  `app_id=org.box44.kailink` pusher. The actual Matrix push-gateway
+  notification is posted to that app pusher's pushkey, which must start with
+  `http://127.0.0.1:8090/`. It sends the real event ID and room ID plus the
+  registered app ID and pushkey; it does not register a fabricated pusher or
+  change production configuration.
+- This substitutes only the server autonomous push decision. Gateway
+  conversion, ntfy distributor delivery, app parsing, wake-up sync, Megolm
+  decryption, and the rendered notification remain real in-gate. A matrix.org
+  device test is required for autonomous server push proof. The sender itself
+  remains strict: it uses `room_put_state` for `m.room.encryption`, requires
+  both nio's encrypted room flag and Conduit's verified
+  `m.megolm.v1.aes-sha2` state, shares the group session before one explicit
+  `encrypt()`/`room_send()` pair, and reports only wire event type and sorted
+  content keys.
+
+- Leg 4 uses a test-only rootless Podman image in
+  `scripts/matrix-nio-sender/`. The image pins `matrix-nio[e2e]` to `0.26.0`
+  and its vodozemac backend to `0.10.0`; the package is installed with the
+  E2EE extra and the container verifies that the vodozemac backend initialized.
+  Rebuild it with:
+  `podman build -t localhost/kailink-matrix-nio-sender:0.26.0 scripts/matrix-nio-sender`.
+- The installed package was inspected in the built image, not inferred from
+  metadata: `/usr/local/lib/python3.13/site-packages/matrix_nio-0.26.0.dist-info/licenses/LICENSE.md`.
+  Its exact heading and text are:
+
+  ```text
+  Internet Systems Consortium license
+  ===================================
+
+  Copyright (c) `2018`, `Damir Jelić <poljar@termina.org.uk>`
+
+  Permission to use, copy, modify, and/or distribute this software for any purpose
+  with or without fee is hereby granted, provided that the above copyright notice
+  and this permission notice appear in all copies.
+
+  THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+  REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR
+  ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
+  AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+  CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+  ```
+
+  The installed package therefore identifies this license as ISC, not Apache;
+  no Apache license claim is made for matrix-nio. The image build output also
+  confirmed `vodozemac-0.10.0` is installed. **Conclusion:** matrix-nio
+  `0.26.0` is test-only containerized tooling, is never linked into the APK,
+  and its permissive ISC license is compatible for this use. The license file
+  is exactly `/usr/local/lib/python3.13/site-packages/matrix_nio-0.26.0.dist-info/licenses/LICENSE.md`.
+- Topology is Conduit plus the sender on the existing `kailink-e2e` Podman
+  network, with the sender's HTTP trigger published on host port 8088 and
+  reverse-tunneled to the emulator. The sender provisions a new per-run
+  `kailink_stage1_*` account, logs in Alice as the KaiLink recipient, creates a
+  `m.megolm.v1.aes-sha2` room, invites Alice, joins Alice through a second
+  device for deterministic invitation completion, performs sync/key exchange,
+  and sends the encrypted body. Alice's KaiLink process must then decrypt and
+  render the exact body; the test asserts `dumpsys notification --noredact`.
+- The sender's credentials and matrix-nio stores are mounted below a unique
+  `mktemp` run directory and are removed by the leg cleanup trap. The sender is
+  built, started, reverse-tunneled, and removed only in leg 4. It never uses
+  the emulator reverse tunnel to reach Conduit; its Matrix URL is the Conduit
+  container DNS name on `kailink-e2e`.
+- matrix-nio's `register()` API in 0.26.0 does not expose Conduit's dummy UIA
+  auth parameter, so account provisioning uses the Matrix registration endpoint
+  with `m.login.dummy`; all E2EE client, sync, room, key, and send operations
+  use matrix-nio. Conduit also requires `{}` in the invited user's `/join`
+  request, which the harness supplies at the equivalent Matrix API boundary.
+- The host timeout robustness change keeps the existing default
+  `E2E_AM_INSTRUMENT_TIMEOUT_SECONDS=900` and applies it independently to
+  every instrumentation leg. A prior transient diagnostic stall was observed
+  while the emulator was under load; bounded instrumentation plus captured
+  output prevents an indefinite run and preserves a nonzero gate result.
+- **Failure diagnosis and precondition:** the clean run failed because leg 4
+  started a new KaiLink process but `EncryptedRoomE2eTest` did not launch the
+  activity, restore the persisted session, or sign in. Consequently there is
+  no KaiLink sync request for the newly joined room/event in the leg-4 portion
+  of the logcat and no production notification path can run. The sender's
+  matrix-nio `room_send()` performs member/device discovery and Megolm
+  to-device key sharing, but the sender now explicitly waits for a non-empty
+  joined recipient device list before the one encrypted send. This is a
+  test-side precondition/readiness fix; production app code, dependencies,
+   version, APK configuration, and legs 1-3 assertions are unchanged.
+
+- The focused follow-up run found a separate downstream boundary: the app was
+  restored as Alice, uploaded keys at `14:02:01.216`, and its current device
+  `JrWBrkic3v` was among the sender's four queried devices at `14:02:06.526`,
+  but the app registered its pusher against the default `https://ntfy.sh`
+  gateway at `14:02:04.928`. No Conduit-to-ntfy or receiver delivery occurred
+  after the one encrypted send. Stage 1 therefore rewrites the existing test
+  pusher to `http://kailink-e2e-ntfy` from androidTest only. The sender also
+  receives that exact app device ID, logs joined membership, and retains the
+  strict bounded query guard; it sends only after that exact ID is present.
+- matrix-nio 0.26.0's `JoinedMembersResponse.members` contains `RoomMember`
+  objects, which are not orderable. The sender therefore sorts their
+  `user_id` strings rather than the objects; this quirk matters when extending
+  Stage 2 with SAS membership/device ordering.
+
 - The official Matrix Rust SDK `sdk-android:26.09.08` handles protocol,
   sync, and E2EE.
 - UnifiedPush `3.3.5` uses the topic URL as the Matrix `pushkey`; the

@@ -8,6 +8,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 import org.junit.AssumptionViolatedException
+import org.box44.kailink.domain.model.Session
 
 /**
  * Tool for real Matrix E2E instrumentation tests.
@@ -49,6 +50,15 @@ class E2eHarness(
         arguments.getString(ARG_PUSHER_GATEWAY)?.trim()?.takeIf { it.isNotEmpty() }
             ?: probeGateway()
             ?: throw AssumptionViolatedException("e2e.pusher_gateway is missing and no gateway reachable")
+
+    fun encryptedSenderUrl(): String =
+        arguments.getString(ARG_ENCRYPTED_SENDER)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: throw AssertionError("e2e.encrypted_sender is missing; the Stage 1 sender container was not started")
+
+    fun currentAppSession(): Session =
+        (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as KaiLinkApp)
+            .graph.sessionStore.load()
+            ?: throw AssertionError("E2E app session is missing")
 
     private fun credentials(userKey: String, passwordKey: String): E2eCredentials {
         val homeserverUrl = requireHomeserver()
@@ -122,6 +132,15 @@ class E2eHarness(
      * ntfy publishes the whole body to the topic).
      */
     fun httpPost(url: String, body: String, timeoutMillis: Int = DEFAULT_TIMEOUT_MILLIS): Int {
+        return httpPostResponse(url, body, timeoutMillis).first
+    }
+
+    /** POST JSON and return both status and response body for strict test harness protocols. */
+    fun httpPostResponse(
+        url: String,
+        body: String,
+        timeoutMillis: Int = DEFAULT_TIMEOUT_MILLIS,
+    ): Pair<Int, String> {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = timeoutMillis
@@ -131,11 +150,12 @@ class E2eHarness(
             connection.setRequestProperty("Content-Type", "application/json")
             connection.outputStream.use { it.write(body.toByteArray()) }
             val code = connection.responseCode
+            val responseBody = (if (code in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
             if (code !in 200..299) {
-                val error = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                throw AssertionError("POST $url -> HTTP $code: ${error.take(300)}")
+                throw AssertionError("POST $url -> HTTP $code: ${responseBody.take(300)}")
             }
-            return code
+            return code to responseBody
         } finally {
             connection.disconnect()
         }
@@ -189,6 +209,7 @@ class E2eHarness(
         private const val ARG_HOMESERVER = "e2e.homeserver"
         private const val ARG_TLS_HOMESERVER = "e2e.tls_homeserver"
         private const val ARG_PUSHER_GATEWAY = "e2e.pusher_gateway"
+        private const val ARG_ENCRYPTED_SENDER = "e2e.encrypted_sender"
         private const val ARG_USERNAME = "e2e.username"
         private const val ARG_PASSWORD = "e2e.password"
         private const val DEFAULT_TIMEOUT_MILLIS = 3_000

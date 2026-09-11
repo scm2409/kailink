@@ -18,6 +18,17 @@
 - The script starts the Conduit homeserver and ntfy gateway as rootless containers, performs `adb reverse` for `tcp:6167` and `tcp:8090`, registers throwaway accounts, builds both APKs offline, and runs the two-account instrumented test (leg 6) plus the fresh-install push test (leg 7: `pm clear` of org.box44.kailink ONLY — the ntfy distributor app is a device precondition and is never touched); do not duplicate any of these steps.
 - Credentials are supplied with `-e` arguments or `E2E_ALICE_*` / `E2E_BOB_*` environment variables.
 - If the gate fails, diagnose the failure rather than masking it.
+- Stage 1 encrypted-room leg 4 builds `scripts/matrix-nio-sender/` as
+  `localhost/kailink-matrix-nio-sender:0.26.0`, starts it only after leg 3,
+  reverse-tunnels its trigger port 8088, and cleans its per-run state/container
+  on exit. The container reaches Conduit as `kailink-e2e-conduit:6167` on the
+  shared `kailink-e2e` network; it does not depend on adb reverse for Matrix
+   traffic. See `docs/decisions.md` for the pinned package/license and proof
+   boundaries. Option C substitutes only Conduit's autonomous push decision
+   with a wake payload sent to Alice's actual local pusher; gateway conversion,
+   distributor delivery, app parsing, sync, decrypt, and notification remain
+   real in-gate. A matrix.org device test is required for autonomous server
+   push proof.
 
 ## Permissions & External Paths
 - Permission allowlist: `/home/dev/.config/opencode/opencode.jsonc` (edit/bash permissions and `external_directory` records for SDK/toolchain paths).
@@ -42,7 +53,7 @@
 - UnifiedPush push path (new in 0.2.6-phase1): delivery is UnifiedPush with the ntfy distributor only — no FCM/Google. `KaiLinkPushReceiver` must stay `exported="true"` in the manifest (a distributor broadcasts as another app targeting this package; `exported=false` silently blocks every UnifiedPush message). Endpoint/registration events stay with `PushController`; every rotated endpoint is re-registered as a Matrix pusher.
 - Push message semantics (new in 0.2.6-phase1): `PushPayload.parse` decodes the UnifiedPush message bytes, which are the raw notify body the homeserver POSTed to the gateway (`{"notification":{…}}` — ntfy publishes the whole body); a `null` result is a non-Matrix payload → wake-up sync only, never drop the sync.
 - Receiver path (new in 0.2.6-phase1): `KaiLinkPushReceiver.onMessage` hands the bytes to `PushMessageHandler` (mutex-serialized, cold-start safe): parse → restore session from `SessionStore` (no session → push dropped) → `syncOnce()` → notification resolution (`MatrixSdkChannelClient.fetchNotification`, SDK `NotificationClient`; room-list fallback `PushNotificationPayload.fromRoom`) → `PushNotifier` render.
-- E2E gate (0.2.6-phase1): `scripts/emulator-e2e.sh` is unchanged and already exercises the push chain (C2 pusher registration → C2b Conduit→ntfy publish → C2c app-side `PushPayload.parse` of the real chain); do not add parallel push steps or containers.
+- Existing push coverage (0.2.6-phase1): the gate exercises the push chain (C2 pusher registration → C2b Conduit→ntfy publish → C2c app-side `PushPayload.parse` of the real chain); do not add parallel push steps or containers.
 - Unit checks: new pure-Kotlin behavior gets JVM checks registered in `AllChecks.runAllChecks` (`app/src/test/kotlin/org/box44/kailink/testing/`).
 
 ## Hard Rules

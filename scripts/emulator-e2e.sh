@@ -16,6 +16,10 @@ DEVICE="${ANDROID_SERIAL:-emulator-5554}"
 CONDUIT_PORT="${E2E_CONDUIT_PORT:-6167}"
 NTFY_PORT="${E2E_NTFY_PORT:-8090}"
 TLS_PORT="${E2E_TLS_PORT:-8443}"
+ENCRYPTED_SENDER_PORT="${E2E_ENCRYPTED_SENDER_PORT:-8088}"
+# Host-side timeout applied independently to every `am instrument` leg.
+AM_INSTRUMENT_TIMEOUT_SECONDS="${E2E_AM_INSTRUMENT_TIMEOUT_SECONDS:-900}"
+TIMEOUT_BIN="$(command -v timeout || true)"
 CONDUIT_IMAGE="docker.io/matrixconduit/matrix-conduit:latest"
 NTFY_IMAGE="docker.io/binwiederhier/ntfy:latest"
 NGINX_IMAGE="docker.io/library/nginx:latest"
@@ -24,8 +28,10 @@ ALICE_USER="${E2E_ALICE_USER:-kailink_alice}"
 ALICE_PASS="${E2E_ALICE_PASS:-phase1-e2e-alice}"
 BOB_USER="${E2E_BOB_USER:-kailink_bob}"
 BOB_PASS="${E2E_BOB_PASS:-phase1-e2e-bob}"
+ENCRYPTED_SENDER_IMAGE="localhost/kailink-matrix-nio-sender:0.26.0"
 
 [[ -x "$ADB" ]] || { echo "ADB missing: $ADB" >&2; exit 2; }
+[[ -n "$TIMEOUT_BIN" ]] || { echo "timeout command missing; cannot bound instrumentation legs" >&2; exit 2; }
 "$ADB" -s "$DEVICE" get-state >/dev/null || { echo "Emulator not reachable: $DEVICE" >&2; exit 2; }
 
 echo "[1/7] Container images (digest into the log)"
@@ -102,7 +108,8 @@ GATE_STATUS=0
 run_leg() { "$@" || GATE_STATUS=1; }
 
 echo "[6/7] Two-account E2E (Chunk A + Chunk B + restore leg) + TLS path test"
-run_leg "$ADB" -s "$DEVICE" shell am instrument -w -r \
+run_leg "$TIMEOUT_BIN" --foreground "$AM_INSTRUMENT_TIMEOUT_SECONDS" \
+  "$ADB" -s "$DEVICE" shell am instrument -w -r \
   -e debug false \
   -e class 'org.box44.kailink.MatrixE2eTest#twoAccountTimelineDeliveryUnencrypted,org.box44.kailink.TlsE2eTest#rustlsLoginOverHttpsFailsWithTlsErrorNotInitPanic' \
   -e e2e.homeserver http://127.0.0.1:6167 \
@@ -126,11 +133,78 @@ echo "[7/7] Fresh-install push E2E (pm clear KaiLink ONLY; ntfy distributor stat
 # default network (checklist 2026-09-10 finding): gate-infrastructure
 # provisioning of the emulator's virtual AP, no project change.
 "$ADB" -s "$DEVICE" shell cmd wifi connect-network AndroidWifi open >/dev/null 2>&1 || true
-run_leg "$ADB" -s "$DEVICE" shell am instrument -w -r \
+run_leg "$TIMEOUT_BIN" --foreground "$AM_INSTRUMENT_TIMEOUT_SECONDS" \
+  "$ADB" -s "$DEVICE" shell am instrument -w -r \
   -e debug false \
   -e class 'org.box44.kailink.FreshInstallPushE2eTest#freshInstallUiSignInRegistersEndpointPusherAndRendersNotification' \
   -e e2e.homeserver http://127.0.0.1:6167 \
   -e e2e.pusher_gateway http://kailink-e2e-ntfy \
+  -e e2e.alice.username "$ALICE_USER" -e e2e.alice.password "$ALICE_PASS" \
+  -e e2e.bob.username "$BOB_USER" -e e2e.bob.password "$BOB_PASS" \
+  org.box44.kailink.test/androidx.test.runner.AndroidJUnitRunner
+
+# Unlike the older legs, capture the instrumentation stream because am
+# instrument can return 0 even when JUnit reports a failed test.
+echo "[leg 4/4] Stage 1 encrypted-room E2E"
+# Option C: Conduit's autonomous push decision is outside emulator scope. Leg 4
+# substitutes only that decision with Alice's actual registered local pusher;
+# gateway conversion, distributor delivery, app parsing, sync, decrypt, and the
+# rendered notification remain real cross-process checks.
+run_encrypted_leg() {
+  local output status sender_logs_status
+  set +e
+  output=$("$TIMEOUT_BIN" --foreground "$AM_INSTRUMENT_TIMEOUT_SECONDS" "$@" 2>&1)
+  status=$?
+  set -e
+  printf '%s\n' "$output"
+  # The sender emits only safe readiness/send diagnostics. Print its complete
+  # container log so device-query evidence is retained in the gate log.
+  if podman logs "$ENCRYPTED_SENDER_NAME"; then
+    sender_logs_status=0
+  else
+    sender_logs_status=$?
+  fi
+  if (( status != 0 )) || (( sender_logs_status != 0 )) || [[ "$output" == *"FAILURES!!!"* ]] || [[ "$output" == *"There was 1 failure"* ]] || [[ "$output" == *"INSTRUMENTATION_STATUS_CODE: -1"* ]]; then
+    GATE_STATUS=1
+  fi
+}
+echo "[leg 4/4] Building and starting matrix-nio[e2e] sender"
+ENCRYPTED_RUN_DIR="$(mktemp -d -p "${TMPDIR:-/tmp}" kailink-stage1.XXXXXX)"
+ENCRYPTED_SENDER_NAME="kailink-e2e-encrypted-sender"
+ENCRYPTED_SENDER_USER="kailink_stage1_$(date -u +%Y%m%d%H%M%S)_$$"
+ENCRYPTED_SENDER_PASS="stage1-${RANDOM}-${RANDOM}-${RANDOM}"
+cleanup_encrypted_sender() {
+  podman rm -f "$ENCRYPTED_SENDER_NAME" >/dev/null 2>&1 || true
+  rm -rf "$ENCRYPTED_RUN_DIR"
+  "$ADB" -s "$DEVICE" reverse --remove "tcp:$ENCRYPTED_SENDER_PORT" >/dev/null 2>&1 || true
+}
+trap cleanup_encrypted_sender EXIT
+podman build -t "$ENCRYPTED_SENDER_IMAGE" scripts/matrix-nio-sender
+podman run -d --name "$ENCRYPTED_SENDER_NAME" --network "$NETWORK" \
+  -p "$ENCRYPTED_SENDER_PORT:8088" \
+  -e MATRIX_HOMESERVER="http://kailink-e2e-conduit:6167" \
+  -e KAILINK_USER="$ALICE_USER" -e KAILINK_PASSWORD="$ALICE_PASS" \
+  -e SENDER_USER="$ENCRYPTED_SENDER_USER" -e SENDER_PASSWORD="$ENCRYPTED_SENDER_PASS" \
+  -e STATE_DIR=/state -v "$ENCRYPTED_RUN_DIR:/state" \
+  "$ENCRYPTED_SENDER_IMAGE" >/dev/null
+SENDER_READY=false
+for _ in $(seq 1 60); do
+  if curl -fsS "http://127.0.0.1:$ENCRYPTED_SENDER_PORT/ready" >/dev/null 2>&1; then SENDER_READY=true; break; fi
+  sleep 1
+done
+if [[ "$SENDER_READY" != true ]]; then
+  echo "Encrypted sender did not become ready." >&2
+  podman logs "$ENCRYPTED_SENDER_NAME" >&2
+  exit 1
+fi
+"$ADB" -s "$DEVICE" reverse "tcp:$ENCRYPTED_SENDER_PORT" "tcp:$ENCRYPTED_SENDER_PORT"
+echo "matrix-nio sender ready (new account $ENCRYPTED_SENDER_USER; state $ENCRYPTED_RUN_DIR)"
+run_encrypted_leg "$ADB" -s "$DEVICE" shell am instrument -w -r \
+  -e debug false \
+  -e class 'org.box44.kailink.EncryptedRoomE2eTest#encryptedRoomMessageRendersNotification' \
+  -e e2e.homeserver http://127.0.0.1:6167 \
+  -e e2e.pusher_gateway http://kailink-e2e-ntfy \
+  -e e2e.encrypted_sender "http://127.0.0.1:$ENCRYPTED_SENDER_PORT" \
   -e e2e.alice.username "$ALICE_USER" -e e2e.alice.password "$ALICE_PASS" \
   -e e2e.bob.username "$BOB_USER" -e e2e.bob.password "$BOB_PASS" \
   org.box44.kailink.test/androidx.test.runner.AndroidJUnitRunner
