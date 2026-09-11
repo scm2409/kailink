@@ -38,6 +38,42 @@ data class PushPayload(
             return PushPayload(roomId = roomId, eventId = eventId, unread = unread)
         }
 
+        /**
+         * Diagnostics for a FAILED parse (0.2.10): a single REDACTED line
+         * saying WHY the bytes are not a Matrix push payload plus shape
+         * metadata only — byte length, JSON validity (structural scan),
+         * top-level key NAMES, notification presence. Never field VALUES,
+         * tokens, or URLs (G7), so the line is safe for the shareable
+         * debug-log ring buffer (same seam as all push logs).
+         *
+         * `null` when the bytes parse successfully (nothing to explain).
+         * The parser behavior itself is unchanged by 0.2.10 (a count-only
+         * or foreign body stays `null` — wake-up sync only).
+         */
+        fun parseFailureSummary(message: ByteArray?): String? {
+            if (parse(message) != null) return null
+            val bytes = message?.size ?: 0
+            val text = message?.toString(Charsets.UTF_8)
+            val scanned = text?.let(::scanTopLevelKeys)
+            val keyNames = scanned.orEmpty()
+            val json = scanned != null
+            val why = when {
+                message == null || message.isEmpty() -> "empty or missing bytes"
+                !json -> "not json"
+                stringField(text ?: "", "room_id") == null &&
+                    stringField(text ?: "", "event_id") == null ->
+                    if (intField(text ?: "", "unread") != null) {
+                        "no room_id or event_id (count-only notification)"
+                    } else {
+                        "no room_id or event_id"
+                    }
+                else -> "no room_id or event_id"
+            }
+            val notificationPresence = if (keyNames.contains(NOTIFICATION_KEY)) "yes" else "no"
+            return "why=$why; shape: bytes=$bytes, json=$json, keys=[${keyNames.joinToString(",")}], " +
+                "notification=$notificationPresence"
+        }
+
         private fun stringField(text: String, name: String): String? =
             Regex("\"" + name + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"")
                 .find(text)
@@ -79,6 +115,76 @@ data class PushPayload(
                 index += 2
             }
             return result.toString()
+        }
+
+        private const val NOTIFICATION_KEY = "notification"
+
+        /** Upper bound for the reported top-level key names (bounded diagnostics). */
+        private const val MAX_REPORTED_KEYS = 8
+
+        /**
+         * String-aware structural scan (no JSON dependency — same offline
+         * constraint as [parse]): returns the top-level key NAMES when the
+         * text is a balanced JSON object, otherwise `null`. Key names are
+         * shape metadata (redaction-safe); values are never read here.
+         * Diagnostics only — [parse] stays the single source of truth.
+         */
+        private fun scanTopLevelKeys(text: String): List<String>? {
+            var index = 0
+            while (index < text.length && text[index].isWhitespace()) index++
+            if (index >= text.length || text[index] != '{') return null
+            var depth = 0
+            var inString = false
+            var escaped = false
+            var keyBuilder: StringBuilder? = null
+            val keys = mutableListOf<String>()
+            while (index < text.length) {
+                val character = text[index]
+                if (inString) {
+                    when {
+                        escaped -> escaped = false
+                        character == '\\' -> escaped = true
+                        character == '"' -> {
+                            inString = false
+                            val builder = keyBuilder
+                            keyBuilder = null
+                            // A top-level key is a string directly followed by ':'.
+                            var lookahead = index + 1
+                            while (lookahead < text.length && text[lookahead].isWhitespace()) lookahead++
+                            if (builder != null && lookahead < text.length && text[lookahead] == ':' &&
+                                keys.size < MAX_REPORTED_KEYS
+                            ) {
+                                keys.add(builder.toString())
+                            }
+                        }
+                        else -> keyBuilder?.append(character)
+                    }
+                } else {
+                    when (character) {
+                        '"' -> {
+                            inString = true
+                            escaped = false
+                            keyBuilder = if (depth == 1) StringBuilder() else null
+                        }
+                        '{', '[' -> depth++
+                        '}', ']' -> {
+                            depth--
+                            if (depth < 0) return null
+                            if (depth == 0) {
+                                // Only whitespace may follow the root object.
+                                var lookahead = index + 1
+                                while (lookahead < text.length) {
+                                    if (!text[lookahead].isWhitespace()) return null
+                                    lookahead++
+                                }
+                                return keys
+                            }
+                        }
+                    }
+                }
+                index++
+            }
+            return if (inString || depth != 0) null else keys
         }
     }
 }

@@ -155,7 +155,23 @@ class MatrixSdkChannelClient(
         closeExisting()
         val c = buildClient(session.homeserverUrl)
         try {
-            c.restoreSession(toSdkSession(session))
+            // 0.2.10 mode-discovery persistence (docs/decisions.md): the
+            // DISCOVER_NATIVE build above re-detected the mode against the
+            // homeserver. The FFI restore would otherwise overwrite the
+            // client's version with the persisted record's (possibly stale)
+            // mode, and the record could never self-heal (no version setter
+            // in the pinned SDK). Reconcile synchronously BEFORE the caller
+            // (the push handler on cold start, LoginViewModel at app start)
+            // proceeds: the last server-verified detection wins, the client
+            // carries it, and `adoptClient` persists it before `restore`
+            // returns — the push-path notification fetch then reads a
+            // persisted, current mode. The NONE fallback semantics are
+            // unchanged (a homeserver without native sliding sync reconciles
+            // to NONE — the record reflects the last verified detection).
+            val detectedMode = sdkVersionToDomainMode(c.slidingSyncVersion())
+            val reconciledMode = reconcileMode(session.slidingSyncMode, detectedMode)
+            describeModeReconciliation(session.slidingSyncMode, detectedMode)?.let(onLog)
+            c.restoreSession(toSdkSession(session, reconciledMode))
         } catch (t: Throwable) {
             runCatching { c.close() }
             sessionStore.clear()
@@ -538,7 +554,18 @@ class MatrixSdkChannelClient(
         }
         return try {
             when (status) {
-                is NotificationStatus.Event -> notificationPayload(status.item, roomId)
+                is NotificationStatus.Event -> {
+                    val payload = notificationPayload(status.item, roomId)
+                    // Cheap per-attempt diagnostic (0.2.10): encrypted state
+                    // of the pushed room, observable in the shared debug log.
+                    if (payload != null) {
+                        onLog(
+                            "Push notification resolved via SDK (room=$roomId, " +
+                                "encrypted=${status.item.roomInfo.isEncrypted == true})",
+                        )
+                    }
+                    payload
+                }
                 else -> null
             }
         } catch (t: Throwable) {
@@ -660,14 +687,19 @@ class MatrixSdkChannelClient(
         slidingSyncMode = MatrixSdkChannelClient.sdkVersionToDomainMode(sdk.slidingSyncVersion),
     )
 
-    private fun toSdkSession(session: Session): SdkSession = SdkSession(
+    private fun toSdkSession(session: Session, modeOverride: SlidingSyncMode? = null): SdkSession = SdkSession(
         accessToken = session.accessToken,
         refreshToken = session.refreshToken,
         userId = session.userId,
         deviceId = session.deviceId,
         homeserverUrl = session.homeserverUrl,
         oauthData = null,
-        slidingSyncVersion = MatrixSdkChannelClient.domainModeToSdkVersion(session.slidingSyncMode),
+        // 0.2.10: the restore passes the RECONCILED mode (last server-verified
+        // detection) so the FFI restore sets the client's version to it
+        // instead of a stale record value; `null` keeps the record's mode.
+        slidingSyncVersion = MatrixSdkChannelClient.domainModeToSdkVersion(
+            modeOverride ?: session.slidingSyncMode,
+        ),
     )
 
     private fun toPatch(diff: TimelineDiff): TimelinePatch? = when (diff) {
@@ -815,6 +847,33 @@ class MatrixSdkChannelClient(
             SlidingSyncMode.NATIVE -> SlidingSyncVersion.NATIVE
             SlidingSyncMode.NONE -> SlidingSyncVersion.NONE
         }
+
+        /**
+         * 0.2.10 mode-discovery persistence: reconciles the persisted
+         * session mode with the mode re-detected by the DISCOVER_NATIVE
+         * client build at restore. The last server-verified detection wins
+         * in BOTH directions (a stale-NONE record self-heals to NATIVE on
+         * a capable homeserver; a NATIVE record honestly downgrades when
+         * the server no longer serves the flag) — the record then reflects
+         * the last verified reality and is persisted synchronously by
+         * `adoptClient` before the restore returns. No homeserver is
+         * special-cased; the DISCOVER_NATIVE detection alone decides.
+         */
+        internal fun reconcileMode(persisted: SlidingSyncMode, detected: SlidingSyncMode): SlidingSyncMode =
+            detected
+
+        /**
+         * Diagnostics: one readable line describing a restore-time mode
+         * reconciliation, or `null` when the modes already agree (nothing
+         * to report). No tokens/URLs (G7) — mode names only.
+         */
+        internal fun describeModeReconciliation(persisted: SlidingSyncMode, detected: SlidingSyncMode): String? =
+            if (persisted == detected) {
+                null
+            } else {
+                "Restored session sliding sync mode reconciled: " +
+                    "persisted=$persisted, detected=$detected"
+            }
 
         internal fun isTlsCertificateFailure(t: Throwable): Boolean {
             var current: Throwable? = t

@@ -269,3 +269,39 @@ failures.
 fresh-install/device push chain including the rendered notification, but
 does **not** prove the matrix.org native rendering path; a device test
 remains required.
+
+## 0.2.10 diagnostics and gate record (2026-09-11)
+
+The 0.2.10 fix closes three diagnostic defects in the push path: parse
+failures now include a redacted reason and shape summary; warm/cold mode
+source and persisted-vs-in-memory mismatches are visible; and room-list
+fallback render/suppress decisions include the room ID, unread count,
+encrypted flag, and suppression reason without content or credentials. Cold
+restore now reconciles the persisted mode with the mode freshly detected by
+`DISCOVER_NATIVE`, then persists the detected result before notification
+resolution. The diagnostics and reconciliation checks were written RED
+against the pre-fix behavior and are green in the final JVM/build run.
+
+The final gate log at `/tmp/opencode/kailink-0.2.10/gate-run-final.log`
+records successful installs, leg 6 `OK (2 tests)` at `Time: 274.726`, and leg
+7 `OK (1 test)` at `Time: 93.896`; the gate exit code was 0. This proves the
+Conduit/ntfy/distributor/device push chain and rendered notification. It does
+not prove encrypted decryption, SAS verification, or matrix.org behavior.
+`InvalidSignature` was observed in encrypted experimentation and is
+explicitly out of scope for 0.2.10, not a claimed fix.
+
+The planned encrypted extension is one small matrix-nio[e2e]-only Python
+harness: Stage 1 creates/joins an encrypted room on fresh Conduit, sends, and
+asserts KaiLink decrypts the unverified message; Stage 2 calls
+`Sas.get_decimals()` while KaiLink displays/confirms decimal SAS and the gate
+compares codes. No matrix-commander or custom Rust client will be used. The
+pinned AAR binding name must be verified later, and the harness license must
+be pinned and recorded when built.
+
+On 2026-09-11 the main coder model switched to Luna (high): the GLM
+reasoning knob was unavailable, this was a T2 practice win, and Martin pushed
+for the quality pass.
+
+**Agent-room requirement:** agent rooms are always required to be E2EE. Martin
+decided that an unencrypted agent room must later produce a visible warning;
+that warning is explicitly deferred and is not implemented in 0.2.10.

@@ -756,3 +756,61 @@ pressure), not demonstrated code failures.
 proves the Conduit plus fresh-install/device push chain including the
 rendered notification. It does **not** prove the matrix.org native
 rendering path; a device test remains required.
+
+## 15. 0.2.10 — push diagnostics and restore-mode reconciliation (2026-09-11)
+
+**Defects found and fixed:** the push handler previously logged only a bare
+parse failure, did not identify whether its sliding-sync mode came from the
+persisted session or the warm in-memory session, and did not expose why the
+room-list fallback rendered or suppressed a notification. Cold restore also
+passed a stale persisted mode back into the SDK after `DISCOVER_NATIVE` had
+re-detected the homeserver capability, so the session could not self-heal.
+KaiLink 0.2.10 now emits bounded, redacted parse-shape diagnostics; records
+mode source, mismatch, restore reconciliation, and fallback outcome; and uses
+the last server-verified discovery result in both directions (`NONE` to
+`NATIVE` and `NATIVE` to `NONE`) before restoring and persisting the session.
+No credentials, tokens, URLs, message bodies, or room display names are
+written to the debug log.
+
+**TDD evidence:** the two new JVM check groups were written RED against the
+pre-0.2.10 behavior and registered in `AllChecks.runAllChecks`: parse-failure
+shape/redaction checks and push mode-source/fallback/reconciliation checks.
+The final run was green: `./gradlew testDebugUnitTest assembleDebug
+--offline` completed with `BUILD SUCCESSFUL`; the phase-1 report recorded all
+registered checks passing (including the new diagnostics checks).
+
+**Final emulator gate evidence:** the existing final run is recorded in
+`/tmp/opencode/kailink-0.2.10/gate-run-final.log`. Its observable final lines
+are leg 6 `Time: 274.726`, `OK (2 tests)`, then leg 7
+`Time: 93.896`, `OK (1 test)`, with successful streamed installs and overall
+gate exit code 0. The gate crossed the Conduit, ntfy, distributor, Android
+emulator, and rendered-notification boundaries. The log does not contain a
+package dump proving the installed version, so this document does not infer
+one from the gate log; the source build version is separately `0.2.10`,
+versionCode 8.
+
+**Encrypted-gate blind spot:** this gate proves the unencrypted two-account
+timeline path and the real UnifiedPush notification path, but it does not
+prove encrypted-message decryption or interactive verification. An
+`InvalidSignature` was observed during encrypted experimentation; it is
+recorded as an observed protocol/test-environment issue, not claimed as a
+0.2.10 fix and remains out of scope for this delivery.
+
+**Future encrypted gate plan:** build one small matrix-nio[e2e]-only Python
+test harness for both stages. Stage 1 will create a fresh Conduit account,
+create or join an encrypted room, send an encrypted message, and assert that
+KaiLink decrypts and displays the unverified message. Stage 2 will use
+`Sas.get_decimals()` in that same harness while the KaiLink debug flow
+displays and confirms the decimal SAS; the gate will compare the codes. The
+harness will not use matrix-commander or a custom Rust client. Before it is
+implemented, verify the pinned AAR binding name and pin/record the harness
+license. Until then, encrypted rendering and SAS remain device-test work.
+
+**Process record:** on 2026-09-11 the main coder model switched to Luna
+(high). Rationale: the GLM reasoning knob was unavailable, this was a T2
+practice win, and Martin requested the quality push.
+
+**Agent-room requirement:** Martin's decision is that agent rooms are always
+E2EE. A later release must visibly warn when an agent room is unencrypted;
+0.2.10 records the requirement but intentionally does not implement that
+warning or alter room creation.

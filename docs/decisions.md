@@ -498,3 +498,46 @@ constitution); the existing E2E script was preserved unchanged.
   remains a physical-device check for the actual `VersionIsMissing` fix
   on-device. (Correction 2026-09-11: this bullet previously claimed gate
   sessions are `NONE`; contradicted by the observed `/versions` flag.)
+
+## 0.2.10: diagnostics and restore-time sliding-sync reconciliation
+
+- **Decision:** keep the parser and notification semantics unchanged, but make
+  failures observable and safe to share. A failed push parse reports only a
+  reason, byte length, JSON validity, bounded top-level key names, and
+  notification-key presence. The push handler reports persisted versus
+  in-memory sliding-sync mode, mismatches, and room-list fallback outcome.
+  Values, tokens, URLs, display names, and message bodies remain excluded
+  from `DebugLog`.
+- **Defect/fix:** restore previously rebuilt a client with discovery, then
+  restored the stale session mode into the SDK. Restore now passes the
+  re-detected mode and persists that server-verified result before callers
+  resolve notifications. This self-heals stale records in both directions;
+  the detection result, not the homeserver URL or a special case, wins.
+- **TDD and verification:** `PushPayloadDiagnosticsChecks` and
+  `PushModeDiagnosticsChecks` were written RED against the pre-0.2.10
+  behavior, registered in `AllChecks`, and are green in the final offline JVM
+  run. The final emulator gate log records successful installs, leg 6
+  `OK (2 tests)` (`Time: 274.726`), leg 7 `OK (1 test)` (`Time: 93.896`),
+  and exit code 0. Existing gate assertions and logs were not weakened or
+  committed.
+- **Encrypted scope:** the gate's encrypted-message proof is a blind spot;
+  it proves the unencrypted timeline and UnifiedPush rendered-notification
+  chain, not decryption or SAS. `InvalidSignature` was observed during
+  encrypted experimentation and is recorded as out of scope for 0.2.10,
+  rather than treated as a fixed defect.
+- **Future encrypted gate:** use one small matrix-nio[e2e]-only Python harness
+  for both stages. Stage 1: a fresh Conduit account creates/joins an
+  encrypted room, sends, and asserts KaiLink decrypts the unverified message.
+  Stage 2: the same harness uses `Sas.get_decimals()` while the KaiLink debug
+  flow displays/confirms decimal SAS and the gate compares the codes. Do not
+  use matrix-commander or a custom Rust client. Verify the pinned AAR binding
+  name later; when the harness is built, pin and record its license.
+- **Version/process record:** versionName `0.2.10`, versionCode 8. On
+  2026-09-11 the main coder model switched to Luna (high) because the GLM
+  reasoning knob was unavailable; the rationale also records a T2 practice
+  win and Martin's quality push.
+- **Agent-room policy (Martin):** agent rooms are always required to be E2EE.
+  If an agent room is later found to be unencrypted, KaiLink must visibly warn
+  the user. That warning is a later-release requirement, not a 0.2.10
+  implementation; this release does not add the warning or change room
+  creation behavior.
